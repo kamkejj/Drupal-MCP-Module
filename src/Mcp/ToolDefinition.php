@@ -28,6 +28,7 @@ final class ToolDefinition {
     public readonly array $extraPermissions = [],
     public readonly ?ToolAnnotations $annotations = NULL,
     public readonly OperationCapability $capability = OperationCapability::Read,
+    public readonly ?\Closure $availability = NULL,
   ) {}
 
   /**
@@ -47,6 +48,7 @@ final class ToolDefinition {
       $this->extraPermissions,
       $this->annotations,
       $this->capability,
+      $this->availability,
     );
   }
 

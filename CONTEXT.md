@@ -36,6 +36,20 @@ for finding and discussing seams.
   requested page sizes (`Mcp\Limits`). Every paging surface resolves through
   it, including the SDK server's advertised pagination limit.
 
+## Configuration creation
+
+- **Configuration mutator** — `Mutation\ConfigurationMutator` creates content
+  types, vocabularies, and reviewed fields behind native configuration access,
+  explicit target/type approvals, collision locks, and conservative recovery.
+  Configuration creation is a separate default-off mutation family, not
+  editorial authority or arbitrary config writing.
+- **Supported field registry** — `Mutation\SupportedFieldTypes` owns the finite
+  field plugin/settings contract and default widget/formatter choices. Generic
+  tools compose a content model; they do not encode Article-specific presets.
+
+See [configuration creation](docs/configuration-creation.md) and its
+[decision record](docs/decisions/generic-mcp-configuration-creation.md).
+
 ## Reads
 
 - **Accessible page** — one bounded page of entities after per-entity view

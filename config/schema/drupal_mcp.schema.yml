@@ -45,6 +45,18 @@ drupal_mcp.settings:
           type: boolean
         node:
           type: boolean
+        configuration:
+          type: boolean
+    configuration_field_targets:
+      type: sequence
+      label: 'Approved configuration field targets (entity_type:bundle)'
+      sequence:
+        type: string
+    configuration_field_types:
+      type: sequence
+      label: 'Approved configuration field plugin types'
+      sequence:
+        type: string
     writable_vocabularies:
       type: sequence
       label: 'Vocabularies writable through MCP'

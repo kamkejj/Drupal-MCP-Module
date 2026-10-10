@@ -30,6 +30,15 @@ The module provides these MCP tool families:
   native access, revision precondition, field validation, and idempotency
   guarantees as taxonomy mutations.
 
+- Disabled-by-default generic configuration creation: content types,
+  vocabularies, and reviewed configurable fields on nodes and taxonomy terms.
+  Native configuration administration permissions and explicit field target/type
+  approvals are required. New structures are not automatically exposed for
+  content reads or editorial writes.
+
+See [Configuration creation](docs/configuration-creation.md) for tool contracts
+and enablement, and the [accepted decision](docs/decisions/generic-mcp-configuration-creation.md).
+
 The server uses Streamable HTTP, OAuth authorization-code flow with PKCE,
 RFC 8707 resource binding, paginated tool discovery, signed cursors, bounded
 request/output sizes, rate limiting, and server-side MCP sessions. Tool families

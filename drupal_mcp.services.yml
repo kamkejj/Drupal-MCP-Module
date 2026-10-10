@@ -87,6 +87,7 @@ services:
     arguments:
       - '@config.factory'
       - '@drupal_mcp.access_policy'
+      - '@url_generator'
     tags:
       - { name: drupal_mcp.tool_provider }
 
@@ -157,6 +158,27 @@ services:
       - '@drupal_mcp.mutation_executor'
       - '@config.factory'
       - '@entity_field.manager'
+    tags:
+      - { name: drupal_mcp.tool_provider }
+
+  Drupal\drupal_mcp\Mutation\ConfigurationMutator:
+    class: Drupal\drupal_mcp\Mutation\ConfigurationMutator
+    arguments:
+      - '@entity_type.manager'
+      - '@config.factory'
+      - '@lock'
+      - '@logger.channel.drupal_mcp'
+      - '@entity_display.repository'
+      - '@entity_field.manager'
+      - '@plugin.manager.field.field_type'
+      - '@plugin.manager.field.widget'
+      - '@plugin.manager.field.formatter'
+
+  Drupal\drupal_mcp\Tool\ConfigurationMutationToolProvider:
+    class: Drupal\drupal_mcp\Tool\ConfigurationMutationToolProvider
+    arguments:
+      - '@Drupal\drupal_mcp\Mutation\ConfigurationMutator'
+      - '@drupal_mcp.mutation_executor'
     tags:
       - { name: drupal_mcp.tool_provider }
 

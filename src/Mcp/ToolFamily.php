@@ -29,6 +29,7 @@ enum ToolFamily: string {
   case Database = 'database';
   case TaxonomyMutation = 'taxonomy_mutation';
   case NodeMutation = 'node_mutation';
+  case ConfigurationMutation = 'configuration_mutation';
 
   /**
    * The drupal_mcp.settings key that enables or disables this family.
@@ -37,6 +38,7 @@ enum ToolFamily: string {
     return match ($this) {
       self::TaxonomyMutation => 'mutation_families.taxonomy',
       self::NodeMutation => 'mutation_families.node',
+      self::ConfigurationMutation => 'mutation_families.configuration',
       default => 'families.' . $this->value,
     };
   }

@@ -9,6 +9,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\drupal_mcp\Diagnostics\ApprovedConfigProjections;
 use Drupal\drupal_mcp\Diagnostics\ApprovedDatabaseSurfaces;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
+use Drupal\drupal_mcp\Mutation\SupportedFieldTypes;
 
 /**
  * Settings for the Drupal MCP endpoint.
@@ -179,6 +180,24 @@ final class SettingsForm extends ConfigFormBase {
       '#open' => FALSE,
       '#tree' => TRUE,
     ];
+    $form['mutations']['configuration'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable configuration creation (content types, vocabularies, fields)'),
+      '#description' => $this->t('Requires native configuration administration permissions. Does not automatically expose new content or terms.'),
+      '#default_value' => (bool) $config->get('mutation_families.configuration'),
+    ];
+    $form['mutations']['configuration_field_targets'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Approved field targets (node:bundle or taxonomy_term:vocabulary, one per line)'),
+      '#default_value' => implode("\n", $config->get('configuration_field_targets') ?? []),
+    ];
+    $types = array_keys(SupportedFieldTypes::all());
+    $form['mutations']['configuration_field_types'] = [
+      '#type' => 'checkboxes',
+      '#title' => $this->t('Approved field types'),
+      '#options' => array_combine($types, $types),
+      '#default_value' => $config->get('configuration_field_types') ?? [],
+    ];
     $form['mutations']['taxonomy'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable taxonomy term mutations'),
@@ -316,6 +335,14 @@ final class SettingsForm extends ConfigFormBase {
       ->set('vocabularies', $lines((string) $form_state->getValue(['families', 'vocabularies'])))
       ->set('mutation_families.taxonomy', (bool) $form_state->getValue(['mutations', 'taxonomy']))
       ->set('mutation_families.node', (bool) $form_state->getValue(['mutations', 'node']))
+      ->set('mutation_families.configuration', (bool) $form_state->getValue(['mutations', 'configuration']))
+      ->set('configuration_field_targets', $lines(
+        (string) $form_state->getValue(['mutations', 'configuration_field_targets'])
+      ))
+      ->set('configuration_field_types', array_values(array_intersect(
+        array_filter((array) $form_state->getValue(['mutations', 'configuration_field_types'])),
+        array_keys(SupportedFieldTypes::all()),
+      )))
       ->set('writable_vocabularies', array_values(array_filter(
         (array) $form_state->getValue(['mutations', 'writable_vocabularies'])
       )))
@@ -348,6 +375,15 @@ final class SettingsForm extends ConfigFormBase {
    */
   public function validateForm(array &$form, FormStateInterface $form_state): void {
     parent::validateForm($form, $form_state);
+
+    $targets = array_filter(array_map('trim', explode(
+      "\n", (string) $form_state->getValue(['mutations', 'configuration_field_targets'])
+    )));
+    foreach ($targets as $target) {
+      if (!preg_match('/^(node|taxonomy_term):[a-z][a-z0-9_]{0,31}$/D', $target)) {
+        $form_state->setErrorByName('mutations][configuration_field_targets', $this->t('Use node:bundle or taxonomy_term:vocabulary machine names.'));
+      }
+    }
 
     $resourceUri = rtrim(trim((string) $form_state->getValue(['auth', 'resource_uri'])), '/');
     $parts = parse_url($resourceUri);

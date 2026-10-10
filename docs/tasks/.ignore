@@ -1,0 +1,3 @@
+# Exclude historical task records from fd/ripgrep discovery.
+# This file does not affect Git tracking.
+*

@@ -74,6 +74,9 @@ final class ToolRegistry {
             continue 2;
           }
         }
+        if ($definition->availability !== NULL && !($definition->availability)($account)) {
+          continue;
+        }
         $tools[$definition->name] = $this->withErrorAudit($definition);
       }
     }

@@ -25,6 +25,19 @@ function drupal_mcp_update_11001(): void {
 }
 
 /**
+ * Adds default-off configuration creation policy without changing exposure.
+ */
+function drupal_mcp_update_11002(): void {
+  $config = \Drupal::configFactory()->getEditable('drupal_mcp.settings');
+  foreach (['mutation_families.configuration' => FALSE, 'configuration_field_targets' => [], 'configuration_field_types' => []] as $key => $default) {
+    if ($config->get($key) === NULL) {
+      $config->set($key, $default);
+    }
+  }
+  $config->save(TRUE);
+}
+
+/**
  * Removes only module-owned operational idempotency state.
  */
 function drupal_mcp_uninstall(): void {

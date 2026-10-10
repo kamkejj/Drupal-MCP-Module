@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Tool;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Routing\UrlGeneratorInterface;
 use Drupal\drupal_mcp\Access\McpAccessPolicy;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
@@ -22,6 +23,7 @@ final class SiteToolProvider implements ToolProviderInterface {
   public function __construct(
     private readonly ConfigFactoryInterface $configFactory,
     private readonly McpAccessPolicy $accessPolicy,
+    private readonly UrlGeneratorInterface $urlGenerator,
   ) {}
 
   /**
@@ -32,7 +34,7 @@ final class SiteToolProvider implements ToolProviderInterface {
       new ToolDefinition(
         name: 'drupal_site_info',
         title: 'Drupal site information',
-        description: 'Returns allowlisted public identity information about this Drupal site (name, slogan, versions). No filesystem paths, email addresses, or secrets.',
+        description: 'Returns allowlisted public identity information about this Drupal site (name, absolute site URL, slogan, versions). The site URL is generated from the current Drupal request context. No filesystem paths, email addresses, or secrets.',
         inputSchema: ToolSchema::object([]),
         handler: fn (array $args, TokenAuthUser $caller): array => $this->siteInfo(),
         family: ToolFamily::Site,
@@ -60,6 +62,7 @@ final class SiteToolProvider implements ToolProviderInterface {
     $system = $this->configFactory->get('system.site');
     return [
       'site_name' => $system->get('name'),
+      'site_url' => $this->urlGenerator->generateFromRoute('<front>', [], ['absolute' => TRUE]),
       'site_slogan' => $system->get('slogan') ?: NULL,
       'drupal_version' => \Drupal::VERSION,
       'default_langcode' => $this->configFactory->get('system.site')->get('langcode') ?: 'en',
