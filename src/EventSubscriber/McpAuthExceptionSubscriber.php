@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\EventSubscriber;
 
 use Drupal\drupal_mcp\Access\McpAccessPolicy;
+use Drupal\drupal_mcp\Http\McpEndpoint;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -46,7 +47,7 @@ final class McpAuthExceptionSubscriber implements EventSubscriberInterface {
       return;
     }
     $request = $event->getRequest();
-    if ($request->getPathInfo() !== '/mcp') {
+    if (!McpEndpoint::matches($request)) {
       return;
     }
 

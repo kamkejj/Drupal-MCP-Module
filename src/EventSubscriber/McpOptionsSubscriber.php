@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\EventSubscriber;
 
+use Drupal\drupal_mcp\Http\McpEndpoint;
 use Drupal\drupal_mcp\Http\McpRequestValidator;
 use Mcp\Schema\Wire\McpHeader;
 use Mcp\Server\Transport\StreamableHttpTransport;
@@ -53,7 +54,7 @@ final class McpOptionsSubscriber implements EventSubscriberInterface {
     }
 
     $request = $event->getRequest();
-    if (!$request->isMethod(Request::METHOD_OPTIONS) || $request->getPathInfo() !== '/mcp') {
+    if (!$request->isMethod(Request::METHOD_OPTIONS) || !McpEndpoint::matches($request)) {
       return;
     }
 
