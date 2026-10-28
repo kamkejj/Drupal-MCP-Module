@@ -29,7 +29,12 @@ function drupal_mcp_update_11001(): void {
  */
 function drupal_mcp_update_11002(): void {
   $config = \Drupal::configFactory()->getEditable('drupal_mcp.settings');
-  foreach (['mutation_families.configuration' => FALSE, 'configuration_field_targets' => [], 'configuration_field_types' => []] as $key => $default) {
+  $defaults = [
+    'mutation_families.configuration' => FALSE,
+    'configuration_field_targets' => [],
+    'configuration_field_types' => [],
+  ];
+  foreach ($defaults as $key => $default) {
     if ($config->get($key) === NULL) {
       $config->set($key, $default);
     }
