@@ -93,7 +93,8 @@ jobs:
         working-directory: app
         run: |
           composer require kamkejj/drupal-mcp:@dev --with-all-dependencies --no-interaction --prefer-dist --no-progress
-          grep -F "['user']" web/modules/contrib/simple_oauth/src/Access/DecoratedUserRolesAccessPolicy.php
+          # Token permission caches must vary by subject (SA-CONTRIB-2026-242).
+          grep -F "oauth2_subject_roles" web/modules/contrib/simple_oauth/src/Access/DecoratedUserRolesAccessPolicy.php
           test -f patches.lock.json
 
       - name: Run unit and kernel tests

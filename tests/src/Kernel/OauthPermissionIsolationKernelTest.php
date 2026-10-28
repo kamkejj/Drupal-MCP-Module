@@ -140,10 +140,16 @@ final class OauthPermissionIsolationKernelTest extends KernelTestBase {
     $this->resetAccessPolicyCaches();
     $this->assertFalse($permissionChecker->hasPermission('administer users', $reader));
 
+    // Simple OAuth >= 6.1.3 (SA-CONTRIB-2026-242) varies the token-subject
+    // role recalculation by the subject's full roles, so two tokens with the
+    // same scopes but different users never share a permission cache entry.
     $roleContexts = $this->container->get('simple_oauth.access_policy.user_roles')->getPersistentCacheContexts();
-    $this->assertContains('user', $roleContexts);
+    $this->assertContains('oauth2_subject_roles', $roleContexts);
     $scopeContexts = $this->container->get('access_policy.simple_oauth')->getPersistentCacheContexts();
-    $this->assertSame(['oauth2_scopes'], $scopeContexts);
+    $this->assertEqualsCanonicalizing(
+      ['oauth2_scopes', 'oauth2_subject_roles', 'user.is_super_user'],
+      $scopeContexts,
+    );
   }
 
   /**

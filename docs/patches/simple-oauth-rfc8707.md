@@ -1,6 +1,6 @@
 # Patch 2 — `simple-oauth-rfc8707.patch`
 
-- Package: `drupal/simple_oauth` 6.1.1 (see `composer.lock`)
+- Package: `drupal/simple_oauth` 6.1.3 (see `composer.lock`); applies unchanged, re-verified 2026-10-27
 - File: `patches/simple-oauth-rfc8707.patch` (47 lines)
 - Description in `composer.json`: "Propagate RFC 8707 resource restrictions into access-token JWTs"
 - Provenance: **locally authored** (`patches.lock.json` `"provenance": "root"`).
@@ -39,7 +39,7 @@ is an owed follow-up recorded in `docs/oauth-resource-binding-gap.md`
 ("Upstream follow-up"). References:
 
 - Project: https://www.drupal.org/project/simple_oauth
-- Pinned source: https://git.drupalcode.org/project/simple_oauth/-/blob/6.1.1/src/Entities/AccessTokenEntity.php (unpatched upstream file)
+- Pinned source: https://git.drupalcode.org/project/simple_oauth/-/blob/6.1.3/src/Entities/AccessTokenEntity.php (unpatched upstream file)
 - Spec: https://www.rfc-editor.org/info/rfc8707/
 
 ## Removal condition

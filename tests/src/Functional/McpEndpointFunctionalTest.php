@@ -344,7 +344,6 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
       ->save();
 
     $readerTokens = $this->authorizeToken();
-    $this->drupalLogout();
     $writerTokens = $this->authorizeToken($this->writerUser, TRUE, NULL, 'mcp:write');
 
     $this->assertNotContains('drupal_term_create', $this->toolNames($readerTokens['access_token'], 30));
@@ -359,6 +358,22 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
     Role::load($this->writerRoleId)?->revokePermission('access mcp write')->save();
     $denied = $this->requestMcp('POST', $writerTokens['access_token'], $this->modernHeaders('tools/list'), $this->modernBody(32, 'tools/list'));
     $this->assertSame(403, $denied->getStatusCode());
+  }
+
+  /**
+   * Tests that logging out of Drupal revokes the user's MCP tokens.
+   *
+   * Simple OAuth >= 6.1.3 revokes every active token of a user who logs out,
+   * so MCP clients must re-authorize after their user ends a site session.
+   */
+  public function testDrupalLogoutRevokesMcpTokens(): void {
+    $tokens = $this->authorizeToken();
+    $this->assertSame(200, $this->requestMcp('POST', $tokens['access_token'], $this->modernHeaders('tools/list'), $this->modernBody(40, 'tools/list'))->getStatusCode());
+
+    $this->drupalLogout();
+    $revoked = $this->requestMcp('POST', $tokens['access_token'], $this->modernHeaders('tools/list'), $this->modernBody(41, 'tools/list'));
+    $this->assertSame(401, $revoked->getStatusCode());
+    $this->assertPrivateNoStore($revoked);
   }
 
   /**
@@ -403,7 +418,6 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
    */
   public function testToolCatalogueVariesByUserInBothRequestOrders(): void {
     $readerTokens = $this->authorizeToken();
-    $this->drupalLogout();
     $administratorTokens = $this->authorizeToken($this->administratorUser);
 
     $administratorTools = $this->toolNames($administratorTokens['access_token'], 15);
@@ -490,6 +504,13 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
    * Creates one authorization code and its PKCE verifier.
    */
   private function authorizeCode(?UserInterface $user = NULL, bool $includeResource = TRUE, ?string $resource = NULL, string $scope = 'mcp:read'): array {
+    // Switch browser accounts without a server-side logout: Simple OAuth
+    // revokes every token of a user who logs out, which would invalidate
+    // tokens granted earlier in the same test.
+    if ($this->loggedInUser) {
+      $this->getSession()->reset();
+      $this->drupalResetSession();
+    }
     $this->drupalLogin($user ?? $this->readerUser);
     $this->codeVerifier = bin2hex(random_bytes(32));
     $challenge = self::base64urlencode(hash('sha256', $this->codeVerifier, TRUE));

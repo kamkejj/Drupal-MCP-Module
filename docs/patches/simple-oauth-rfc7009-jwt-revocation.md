@@ -1,6 +1,6 @@
 # Patch 3 — `simple-oauth-rfc7009-jwt-revocation.patch`
 
-- Package: `e0ipso/simple_oauth_21` v1.13.0 (see `composer.lock`)
+- Package: `e0ipso/simple_oauth_21` v1.13.1 (see `composer.lock`); applies unchanged, re-verified 2026-10-27
 - File: `patches/simple-oauth-rfc7009-jwt-revocation.patch` (109 lines)
 - Description in `composer.json`: "Resolve revoked tokens by their stored identifier (JWT jti or encrypted payload)"
 - Provenance: **locally authored** (`patches.lock.json` `"provenance": "root"`).
