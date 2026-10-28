@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Mutation;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldDefinitionInterface;
+use Drupal\Core\Field\Plugin\Field\FieldType\EntityReferenceItem;
+use Drupal\file\FileInterface;
 use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\filter\FilterFormatInterface;
@@ -19,13 +20,24 @@ use Drupal\drupal_mcp\Settings;
  * Owns the complete policy and persistence boundary for node mutations.
  *
  * Create and update only. The only writable base field is "title"; every
- * other base field is protected and all remaining writes go through
- * configured fields, each gated by edit access and entity validation.
+ * other base field, including bundle overrides, is protected and all
+ * remaining writes go through configured fields, each gated by edit access
+ * and entity validation. Referenced entities and files must be accessible
+ * to the caller.
  */
 final class NodeMutator implements EntityMutatorInterface {
 
   private const FORMATTED_TEXT_TYPES = ['text', 'text_long', 'text_with_summary'];
   private const REFERENCE_TYPES = ['entity_reference', 'taxonomy_term_reference'];
+  private const FILE_TYPES = ['file', 'image'];
+
+  /**
+   * Item properties a caller may supply per file field type.
+   */
+  private const FILE_ITEM_PROPERTIES = [
+    'file' => ['target_id', 'description'],
+    'image' => ['target_id', 'alt', 'title'],
+  ];
   private const COMMAND_KEYS = [
     'type', 'id', 'expected_revision_id', 'changes', 'idempotency_key', '_session', '_request',
   ];
@@ -161,11 +173,23 @@ final class NodeMutator implements EntityMutatorInterface {
 
   /**
    * Enforces the protected base-field denylist and per-field edit access.
+   *
+   * Base fields are identified through their storage, not their definition
+   * class: bundle overrides (BaseFieldOverride) are configuration entities
+   * rather than BaseFieldDefinition instances. Reference-like types without
+   * a dedicated, access-checked normalizer are refused outright, so a target
+   * id can never reach storage without the caller's own access check.
    */
   private function assertWritableField(AccountInterface $account, NodeInterface $node, string $name): void {
     $definition = $node->getFieldDefinition($name);
     if ($definition === NULL
-      || ($name !== 'title' && $definition instanceof BaseFieldDefinition)) {
+      || ($name !== 'title' && $definition->getFieldStorageDefinition()->isBaseField())) {
+      throw $this->failure('field_not_writable', sprintf('Field "%s" is not writable.', $name));
+    }
+    $type = $definition->getType();
+    if (is_subclass_of($definition->getItemDefinition()->getClass(), EntityReferenceItem::class)
+      && !\in_array($type, self::REFERENCE_TYPES, TRUE)
+      && !\in_array($type, self::FILE_TYPES, TRUE)) {
       throw $this->failure('field_not_writable', sprintf('Field "%s" is not writable.', $name));
     }
     if (!$node->get($name)->access('edit', $account)) {
@@ -192,10 +216,58 @@ final class NodeMutator implements EntityMutatorInterface {
     elseif (\in_array($type, self::REFERENCE_TYPES, TRUE)) {
       $items = $this->normalizeReferences($account, $definition, $value);
     }
+    elseif (\in_array($type, self::FILE_TYPES, TRUE)) {
+      $items = $this->normalizeFiles($account, $type, $value);
+    }
     else {
       $items = \is_array($value) ? $value : [$value];
     }
     $node->set($name, $items);
+  }
+
+  /**
+   * Normalizes file items and authorizes every file for the caller.
+   *
+   * A caller may only reference a file it can already view and download
+   * under Drupal's native file access: its own files, public files, or
+   * private files reachable through an entity it may view. Every submitted
+   * item is checked for the explicit caller rather than relying on core's
+   * ReferenceAccess constraint, which reads the ambient current user and can
+   * skip newly added targets on update.
+   */
+  private function normalizeFiles(AccountInterface $account, string $type, mixed $value): array {
+    if (!\is_array($value) || !array_is_list($value)) {
+      throw $this->failure('invalid_reference', 'File fields require a list of file items.');
+    }
+    $allowed = self::FILE_ITEM_PROPERTIES[$type];
+    $items = [];
+    foreach ($value as $item) {
+      if (!\is_array($item) || !\is_int($item['target_id'] ?? NULL) || $item['target_id'] < 1
+        || array_diff(array_keys($item), $allowed) !== []) {
+        throw $this->failure('invalid_reference', 'A file item is malformed.');
+      }
+      foreach (array_diff($allowed, ['target_id']) as $property) {
+        if (\array_key_exists($property, $item) && !\is_string($item[$property])) {
+          throw $this->failure('invalid_reference', 'A file item is malformed.');
+        }
+      }
+      $items[] = $item;
+    }
+    if ($items === []) {
+      return [];
+    }
+
+    $ids = array_column($items, 'target_id');
+    $files = $this->entityTypeManager->getStorage('file')->loadMultiple($ids);
+    foreach ($ids as $id) {
+      $file = $files[$id] ?? NULL;
+      if (!$file instanceof FileInterface
+        || !$file->access('view', $account)
+        || !$file->access('download', $account)) {
+        throw $this->failure('invalid_reference', 'A file reference is invalid or inaccessible.');
+      }
+    }
+    return $items;
   }
 
   /**
@@ -292,7 +364,7 @@ final class NodeMutator implements EntityMutatorInterface {
         $item = $list->first();
         $fields[$name] = $item === FALSE ? NULL : ['value' => (string) $item->value, 'format' => (string) $item->format];
       }
-      elseif (\in_array($type, self::REFERENCE_TYPES, TRUE)) {
+      elseif (\in_array($type, self::REFERENCE_TYPES, TRUE) || \in_array($type, self::FILE_TYPES, TRUE)) {
         $fields[$name] = array_values(array_map(
           static fn (array $entry): int => (int) $entry['target_id'],
           $list->getValue(),

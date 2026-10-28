@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Tool;
 
 use Drupal\Core\Entity\EntityFieldManagerInterface;
+use Drupal\Core\Field\Plugin\Field\FieldType\EntityReferenceItem;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
 use Drupal\drupal_mcp\Mcp\ToolFamily;
@@ -42,14 +43,23 @@ final class ContentMutationToolProvider implements ToolProviderInterface {
         if ($name === 'title' || isset($fields[$name]) || str_starts_with($name, 'revision_')) {
           continue;
         }
-        $fields[$name] = match ($definition->getType()) {
+        $type = $definition->getType();
+        // Reference-like types without an access-checked normalizer are
+        // refused by the mutator, so they are not advertised either.
+        if (is_subclass_of($definition->getItemDefinition()->getClass(), EntityReferenceItem::class)
+          && !\in_array($type, ['entity_reference', 'file', 'image'], TRUE)) {
+          continue;
+        }
+        $fields[$name] = match ($type) {
           'text', 'text_long', 'text_with_summary' => ToolSchema::formattedText(),
-          'entity_reference', 'entity_reference_revisions' => [
+          'entity_reference' => [
             'oneOf' => [
               ['type' => 'integer', 'minimum' => 1],
               ['type' => 'array', 'items' => ['type' => 'integer', 'minimum' => 1], 'minItems' => 1],
             ],
           ],
+          'file' => ToolSchema::fileItems(['description']),
+          'image' => ToolSchema::fileItems(['alt', 'title']),
           'boolean' => ['type' => 'boolean'],
           'integer' => ['type' => 'integer'],
           'float', 'decimal' => ['type' => 'number'],

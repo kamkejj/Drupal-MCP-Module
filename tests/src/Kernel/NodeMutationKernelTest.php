@@ -6,6 +6,7 @@ namespace Drupal\Tests\drupal_mcp\Kernel;
 
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\file\Entity\File;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\node\Entity\Node;
@@ -83,7 +84,9 @@ final class NodeMutationKernelTest extends KernelTestBase {
     $this->installEntitySchema('taxonomy_term');
     $this->installEntitySchema('consumer');
     $this->installEntitySchema('oauth2_token');
+    $this->installEntitySchema('file');
     $this->installSchema('node', ['node_access']);
+    $this->installSchema('file', ['file_usage']);
     $this->installConfig(['system', 'user', 'filter', 'node', 'drupal_mcp']);
 
     NodeType::create(['type' => 'article', 'name' => 'Article'])->save();
@@ -106,6 +109,19 @@ final class NodeMutationKernelTest extends KernelTestBase {
       'field_name' => 'field_mcp_number',
       'type' => 'integer',
       'cardinality' => 1,
+    ])->save();
+    FieldStorageConfig::create([
+      'entity_type' => 'node',
+      'field_name' => 'field_mcp_files',
+      'type' => 'file',
+      'cardinality' => -1,
+      'settings' => ['uri_scheme' => 'private'],
+    ])->save();
+    FieldConfig::create([
+      'entity_type' => 'node',
+      'bundle' => 'article',
+      'field_name' => 'field_mcp_files',
+      'settings' => ['file_extensions' => 'txt'],
     ])->save();
     foreach (['article', 'page'] as $type) {
       FieldConfig::create([
@@ -209,6 +225,111 @@ final class NodeMutationKernelTest extends KernelTestBase {
       'field_mcp_missing' => 'x',
     ]);
     $this->assertCreateFailure('invalid_value', ['type' => 'article', 'title' => ' ']);
+  }
+
+  /**
+   * Tests that bundle overrides of base fields stay protected.
+   *
+   * Unchecking "Published" or "Promoted" defaults on a content type stores a
+   * BaseFieldOverride, which is not a BaseFieldDefinition instance. Even a
+   * caller with native edit access to those fields must not write them.
+   */
+  public function testBundleOverriddenBaseFieldsStayProtected(): void {
+    $baseFields = $this->container->get('entity_field.manager')->getBaseFieldDefinitions('node');
+    foreach (['status', 'promote', 'sticky'] as $name) {
+      $baseFields[$name]->getConfig('article')->setDefaultValue(FALSE)->save();
+    }
+    $this->container->get('entity_field.manager')->clearCachedFieldDefinitions();
+    Role::create([
+      'id' => 'mcp_node_admin',
+      'label' => 'MCP node admin',
+      'permissions' => [
+        'access content',
+        'access mcp write',
+        'administer nodes',
+        'create article content',
+      ],
+    ])->save();
+    $admin = $this->createUser('node-admin', ['mcp_node_admin']);
+
+    foreach (['status', 'promote', 'sticky'] as $name) {
+      $this->assertCreateFailure('field_not_writable', [
+        'type' => 'article',
+        'title' => 'Overridden base field',
+        $name => TRUE,
+      ], $admin);
+    }
+  }
+
+  /**
+   * Tests that file references require the caller's own file access.
+   */
+  public function testFileReferencesRequireCallerFileAccess(): void {
+    // Created first so their ids (1, 2) collide with field delta keys, the
+    // shape that makes core's ReferenceAccess constraint skip new targets.
+    $ownA = $this->file('own-a.txt', $this->writer);
+    $ownB = $this->file('own-b.txt', $this->writer);
+    $owner = $this->createUser('file-owner', ['mcp_writer']);
+    $foreign = $this->file('foreign.txt', $owner);
+
+    $this->assertCreateFailure('invalid_reference', [
+      'type' => 'article',
+      'title' => 'Foreign private file',
+      'field_mcp_files' => [['target_id' => (int) $foreign->id()]],
+    ]);
+    $this->assertCreateFailure('invalid_reference', [
+      'type' => 'article',
+      'title' => 'Missing file',
+      'field_mcp_files' => [['target_id' => 999999]],
+    ]);
+    $this->assertCreateFailure('invalid_reference', [
+      'type' => 'article',
+      'title' => 'Malformed file',
+      'field_mcp_files' => [(int) $ownA->id()],
+    ]);
+
+    $created = $this->mutator->create($this->caller(), [
+      'type' => 'article',
+      'title' => 'Own files',
+      'field_mcp_files' => [
+        ['target_id' => (int) $ownA->id(), 'description' => 'First'],
+        ['target_id' => (int) $ownB->id()],
+      ],
+    ]);
+    $this->assertSame([(int) $ownA->id(), (int) $ownB->id()], $created['fields']['field_mcp_files']);
+
+    // Adding a foreign file on update must be refused even though the node
+    // already references files whose ids match existing delta keys.
+    $node = Node::load($created['id']);
+    $this->assertFailure('invalid_reference', fn () => $this->mutator->update($this->caller(), [
+      'id' => (int) $node->id(),
+      'expected_revision_id' => (int) $node->getRevisionId(),
+      'changes' => [
+        'field_mcp_files' => [
+          ['target_id' => (int) $ownA->id()],
+          ['target_id' => (int) $ownB->id()],
+          ['target_id' => (int) $foreign->id()],
+        ],
+      ],
+    ]));
+
+    // A private file the caller can already download through a viewable
+    // referencing entity follows native semantics and may be referenced.
+    $shared = $this->file('shared.txt', $owner);
+    Node::create([
+      'type' => 'article',
+      'title' => 'Shared file holder',
+      'uid' => $owner->id(),
+      'status' => 1,
+      'field_mcp_files' => [['target_id' => (int) $shared->id()]],
+    ])->save();
+    $this->container->get('entity_type.manager')->getAccessControlHandler('file')->resetCache();
+    $reused = $this->mutator->create($this->caller(), [
+      'type' => 'article',
+      'title' => 'Reused shared file',
+      'field_mcp_files' => [['target_id' => (int) $shared->id()]],
+    ]);
+    $this->assertSame([(int) $shared->id()], $reused['fields']['field_mcp_files']);
   }
 
   /**
@@ -374,6 +495,21 @@ final class NodeMutationKernelTest extends KernelTestBase {
     $term = Term::create(['vid' => $vocabulary, 'name' => $name]);
     $term->save();
     return $term;
+  }
+
+  /**
+   * Creates and saves a permanent private file fixture. */
+  private function file(string $name, UserInterface $owner): File {
+    $file = File::create([
+      'uri' => 'private://' . $name,
+      'filename' => $name,
+      'filemime' => 'text/plain',
+      'filesize' => 0,
+      'uid' => $owner->id(),
+      'status' => 1,
+    ]);
+    $file->save();
+    return $file;
   }
 
   /**

@@ -44,6 +44,24 @@ final class ToolSchema {
   }
 
   /**
+   * A file-field argument: a list of existing file ids plus item metadata.
+   *
+   * @param list<string> $metadata
+   *   Optional string item properties, e.g. "description" or "alt".
+   */
+  public static function fileItems(array $metadata): array {
+    $properties = ['target_id' => ['type' => 'integer', 'minimum' => 1]];
+    foreach ($metadata as $property) {
+      $properties[$property] = ['type' => 'string'];
+    }
+    return [
+      'type' => 'array',
+      'description' => 'Existing files the caller may already view and download.',
+      'items' => self::object($properties, ['target_id']),
+    ];
+  }
+
+  /**
    * The formatted-text argument: a value plus an authorized filter format.
    */
   public static function formattedText(): array {
