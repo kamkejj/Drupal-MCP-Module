@@ -288,8 +288,8 @@ final class NodeMutator implements EntityMutatorInterface {
    * Normalizes and validates entity references.
    */
   private function normalizeReferences(AccountInterface $account, FieldDefinitionInterface $definition, mixed $value): array {
-    if (!\is_array($value) || (!array_is_list($value) && !\is_int($value))) {
-      throw $this->failure('invalid_reference', 'References must be a list of entity IDs.');
+    if (!\is_int($value) && (!\is_array($value) || !array_is_list($value))) {
+      throw $this->failure('invalid_reference', 'References must be an entity ID or a list of entity IDs.');
     }
     $ids = \is_int($value) ? [$value] : $value;
     if ($ids === []) {

@@ -20,6 +20,7 @@ use Drupal\user\UserInterface;
 use Drupal\Tests\drupal_mcp\Traits\TokenCallerTrait;
 use Drupal\drupal_mcp\Mutation\NodeMutationException;
 use Drupal\drupal_mcp\Mutation\NodeMutator;
+use Drupal\drupal_mcp\Tool\ContentMutationToolProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\drupal_mcp\Settings;
@@ -262,6 +263,28 @@ final class NodeMutationKernelTest extends KernelTestBase {
   }
 
   /**
+   * Tests the write schema advertises only fields the mutator may write.
+   */
+  public function testWriteSchemaAdvertisesOnlyWritableFields(): void {
+    $provider = $this->container->get(ContentMutationToolProvider::class);
+    $schemas = [];
+    foreach ($provider->tools() as $definition) {
+      $schemas[$definition->name] = $definition->inputSchema;
+    }
+    $create = array_keys((array) $schemas['drupal_content_create']['properties']);
+    $changes = array_keys((array) $schemas['drupal_content_update']['properties']->changes['properties']);
+
+    foreach ([$create, $changes] as $properties) {
+      $this->assertContains('title', $properties);
+      $this->assertContains('field_mcp_text', $properties);
+      $this->assertContains('field_mcp_files', $properties);
+      foreach (['nid', 'uuid', 'vid', 'uid', 'status', 'promote', 'sticky', 'created', 'changed', 'path', 'langcode'] as $baseField) {
+        $this->assertNotContains($baseField, $properties);
+      }
+    }
+  }
+
+  /**
    * Tests that file references require the caller's own file access.
    */
   public function testFileReferencesRequireCallerFileAccess(): void {
@@ -413,6 +436,13 @@ final class NodeMutationKernelTest extends KernelTestBase {
       'title' => 'Malformed refs',
       'field_mcp_tags' => 'tags',
     ]));
+    // The tool schema advertises a single id as well as a list.
+    $single = $this->mutator->create($this->caller(), [
+      'type' => 'article',
+      'title' => 'Single ref',
+      'field_mcp_tags' => (int) $term->id(),
+    ]);
+    $this->assertSame([(int) $term->id()], $single['fields']['field_mcp_tags']);
 
     $this->container->get('state')->set('drupal_mcp_test.denied_entities', ['taxonomy_term:' . $term->id()]);
     $this->container->get('state')->set('drupal_mcp_test.denied_entity_operations', ['view']);

@@ -40,7 +40,9 @@ final class ContentMutationToolProvider implements ToolProviderInterface {
     $fields = ['title' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 255]];
     foreach ($writableBundles as $bundle) {
       foreach ($this->entityFieldManager->getFieldDefinitions('node', $bundle) as $name => $definition) {
-        if ($name === 'title' || isset($fields[$name]) || str_starts_with($name, 'revision_')) {
+        // Only "title" among base fields is writable, so the others
+        // (including bundle overrides) are never advertised.
+        if ($name === 'title' || isset($fields[$name]) || $definition->getFieldStorageDefinition()->isBaseField()) {
           continue;
         }
         $type = $definition->getType();
