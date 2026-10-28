@@ -80,6 +80,70 @@ final class IdempotencyManagerTest extends TestCase {
   }
 
   /**
+   * Tests a recently started execution still blocks a concurrent retry.
+   */
+  public function testRejectsRecentInProgressEntry(): void {
+    $manager = $this->manager($entries, $now);
+    $identity = $manager->identityDigest('7', 'client', 'create', 'key');
+    $entries[$identity] = [
+      'value' => [
+        'state' => 'in_progress',
+        'payload_digest' => $manager->payloadDigest(['x' => 1]),
+        'started' => $now - 5,
+      ],
+      'expire' => $now + 86400,
+    ];
+
+    $this->expectException(IdempotencyInProgressException::class);
+    $manager->execute('7', 'client', 'create', 'key', ['x' => 1], fn (): array => []);
+  }
+
+  /**
+   * Tests an execution abandoned by a crashed request is recovered.
+   *
+   * A fatal error skips the marker cleanup, but the lock is released at
+   * request shutdown. Once the marker outlives the execution lock it can only
+   * belong to a dead request, so the key must not stay blocked for the full
+   * idempotency lifetime.
+   */
+  public function testRecoversAbandonedInProgressEntry(): void {
+    $manager = $this->manager($entries, $now);
+    $identity = $manager->identityDigest('7', 'client', 'create', 'key');
+    $entries[$identity] = [
+      'value' => [
+        'state' => 'in_progress',
+        'payload_digest' => $manager->payloadDigest(['x' => 1]),
+        'started' => $now - IdempotencyManager::EXECUTION_LOCK_SECONDS,
+      ],
+      'expire' => $now + 86400,
+    ];
+
+    $result = $manager->execute('7', 'client', 'create', 'key', ['x' => 1], fn (): array => ['id' => 9]);
+
+    $this->assertFalse($result->replayed);
+    $this->assertSame(['id' => 9], $result->result);
+  }
+
+  /**
+   * Tests an abandoned marker still enforces its payload binding.
+   */
+  public function testAbandonedInProgressEntryKeepsPayloadBinding(): void {
+    $manager = $this->manager($entries, $now);
+    $identity = $manager->identityDigest('7', 'client', 'create', 'key');
+    $entries[$identity] = [
+      'value' => [
+        'state' => 'in_progress',
+        'payload_digest' => $manager->payloadDigest(['x' => 1]),
+        'started' => $now - IdempotencyManager::EXECUTION_LOCK_SECONDS,
+      ],
+      'expire' => $now + 86400,
+    ];
+
+    $this->expectException(IdempotencyConflictException::class);
+    $manager->execute('7', 'client', 'create', 'key', ['x' => 2], fn (): array => []);
+  }
+
+  /**
    * Tests isolation across every caller identity dimension.
    */
   public function testIdentityIsolation(): void {

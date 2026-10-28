@@ -14,12 +14,25 @@ use Drupal\drupal_mcp\Settings;
  * Executes mutations once and persists bounded replay results.
  *
  * Caller keys are transformed with a keyed digest before storage or locking.
- * Failed executions remove their in-progress marker, allowing a later retry.
+ * Failed executions remove their in-progress marker, allowing a later retry;
+ * markers left by requests that died mid-execution are recovered once they
+ * outlive the execution lock.
  */
 final class IdempotencyManager {
 
   private const COLLECTION = 'drupal_mcp_idempotency';
   private const MAXIMUM_RESULT_BYTES = 65536;
+
+  /**
+   * Lifetime of the per-key execution lock, in seconds.
+   *
+   * Bounds how long one mutation may run exclusively. An in-progress marker
+   * older than this can only belong to a request that died before cleanup
+   * (a fatal error skips the marker removal, while Drupal still releases
+   * locks at shutdown), so it is recovered instead of blocking the key for
+   * the whole idempotency lifetime.
+   */
+  public const EXECUTION_LOCK_SECONDS = 300;
 
   public function __construct(
     private readonly KeyValueExpirableFactoryInterface $keyValueExpirable,
@@ -45,7 +58,7 @@ final class IdempotencyManager {
     $lockName = self::COLLECTION . ':' . $identity;
     $ttl = $this->settings->idempotencyTtl();
 
-    if (!$this->lock->acquire($lockName, $ttl)) {
+    if (!$this->lock->acquire($lockName, self::EXECUTION_LOCK_SECONDS)) {
       throw new IdempotencyInProgressException();
     }
 
@@ -59,7 +72,7 @@ final class IdempotencyManager {
         if (($entry['state'] ?? NULL) === 'complete' && \array_key_exists('result', $entry)) {
           return new IdempotencyResult($entry['result'], TRUE);
         }
-        if (($entry['state'] ?? NULL) === 'in_progress') {
+        if (($entry['state'] ?? NULL) === 'in_progress' && !$this->isAbandoned($entry)) {
           throw new IdempotencyInProgressException();
         }
       }
@@ -93,6 +106,17 @@ final class IdempotencyManager {
     finally {
       $this->lock->release($lockName);
     }
+  }
+
+  /**
+   * Whether an in-progress marker has outlived its execution lock.
+   *
+   * Markers without a start time are treated as active.
+   */
+  private function isAbandoned(array $entry): bool {
+    $started = $entry['started'] ?? NULL;
+    return \is_int($started)
+      && $this->time->getCurrentTime() - $started >= self::EXECUTION_LOCK_SECONDS;
   }
 
   /**
