@@ -8,6 +8,7 @@ use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\drupal_mcp\Diagnostics\DatabaseInspector;
 use Drupal\drupal_mcp\Diagnostics\ReadOnlyDatabaseConnection;
 use Drupal\drupal_mcp\Mcp\SignedCursor;
+use Drupal\drupal_mcp\Tool\DatabaseToolProvider;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Drupal\Tests\drupal_mcp\Unit\Fixtures\ConfigFactoryStub;
 use Mcp\Exception\ToolCallException;
@@ -31,6 +32,21 @@ final class DatabaseInspectorAccessTest extends TestCase {
 
     $this->assertSame(1, $result['count']);
     $this->assertSame(['users_public'], array_column($result['surfaces'], 'name'));
+  }
+
+  /**
+   * Tests the catalogue tool hands its caller to the inspector.
+   */
+  public function testTablesToolFiltersForItsCaller(): void {
+    $provider = new DatabaseToolProvider($this->inspector());
+    $tools = array_column(array_map(
+      static fn ($definition): array => ['name' => $definition->name, 'handler' => $definition->handler],
+      $provider->tools(),
+    ), 'handler', 'name');
+
+    $result = $tools['drupal_database_tables']([], $this->caller('administer taxonomy'));
+
+    $this->assertSame(['taxonomy_public'], array_column($result['surfaces'], 'name'));
   }
 
   /**

@@ -33,7 +33,7 @@ final class DatabaseToolProvider implements ToolProviderInterface {
         title: 'List approved database surfaces',
         description: 'Lists only curated database views explicitly approved for MCP diagnostics. It never enumerates the underlying Drupal schema.',
         inputSchema: ToolSchema::object([]),
-        handler: fn (array $args, TokenAuthUser $caller): array => $this->inspector->tables(),
+        handler: fn (array $args, TokenAuthUser $caller): array => $this->inspector->tables($caller),
         family: ToolFamily::Database,
         extraPermissions: $diagnosticPermissions,
         annotations: $annotations,
