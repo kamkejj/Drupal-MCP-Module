@@ -63,7 +63,12 @@ final class ApprovedDrushCommands {
         }
         return $argv;
       },
-      project: fn (array $out): array => $out,
+      // Drush emits filesystem paths and packaging metadata per extension;
+      // only identity, type, enable state, and version leave the server.
+      project: fn (array $out): array => array_map(
+        fn (array $extension): array => self::pick($extension, ['name', 'display_name', 'type', 'status', 'version']),
+        array_filter($out, 'is_array'),
+      ),
     );
 
     $specs['config:get'] = new DrushCommandSpec(

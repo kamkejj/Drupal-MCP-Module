@@ -48,8 +48,14 @@ final class DrushRunner {
 
   /**
    * Fixed argv prefix: no alias, no arbitrary --uri/--root, no user switch.
+   *
+   * Confirmation prompts are always refused with "--no". In Drush,
+   * --no-interaction alone accepts each prompt's default (usually "yes"),
+   * exactly like --yes. This is defense in depth only: some state-changing
+   * commands never prompt, so the approved-command catalogue remains the
+   * boundary that keeps diagnostics read-only.
    */
-  private const FIXED_PREFIX = ['--yes', '--no-ansi', '--no-interaction'];
+  private const FIXED_PREFIX = ['--no', '--no-ansi', '--no-interaction'];
 
   public function __construct(
     private readonly Settings $settings,

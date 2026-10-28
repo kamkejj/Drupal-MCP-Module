@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\drupal_mcp\Unit;
 
 use Drupal\drupal_mcp\Diagnostics\ApprovedDrushCommands;
+use Drupal\drupal_mcp\Diagnostics\DrushRunner;
 use PHPUnit\Framework\TestCase;
 use Drupal\drupal_mcp\Settings;
 use Drupal\Tests\drupal_mcp\Unit\Fixtures\ConfigFactoryStub;
@@ -31,6 +32,50 @@ final class ApprovedDrushCommandsTest extends TestCase {
       'drupal-version' => '11.4.6',
       'php-version' => '8.4.20',
     ], $result);
+  }
+
+  /**
+   * Tests that pm:list output keeps only identity, type, status, and version.
+   */
+  public function testPmListProjectionDropsPathsAndPackaging(): void {
+    $spec = ApprovedDrushCommands::all()['pm:list'];
+
+    $result = ($spec->project)([
+      'node' => [
+        'package' => 'Core',
+        'project' => '',
+        'display_name' => 'Node (node)',
+        'name' => 'node',
+        'type' => 'module',
+        'path' => 'core/modules/node',
+        'status' => 'Enabled',
+        'version' => '11.4.9',
+      ],
+      'not-an-extension' => 'scalar',
+    ], []);
+
+    $this->assertSame([
+      'node' => [
+        'name' => 'node',
+        'display_name' => 'Node (node)',
+        'type' => 'module',
+        'status' => 'Enabled',
+        'version' => '11.4.9',
+      ],
+    ], $result);
+  }
+
+  /**
+   * Tests that diagnostics refuse every confirmation prompt.
+   *
+   * Drush treats --no-interaction like --yes, so only "--no" refuses.
+   */
+  public function testRunnerArgvPrefixRefusesConfirmations(): void {
+    $prefix = (new \ReflectionClassConstant(DrushRunner::class, 'FIXED_PREFIX'))->getValue();
+
+    $this->assertContains('--no', $prefix);
+    $this->assertNotContains('--yes', $prefix);
+    $this->assertNotContains('-y', $prefix);
   }
 
   /**
