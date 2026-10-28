@@ -226,7 +226,7 @@ final class ReadToolSurfaceKernelTest extends KernelTestBase {
       $this->fail('Expected a nonexistent block rejection.');
     }
     catch (ToolCallException $exception) {
-      $this->assertSame('Block 999 does not exist.', $exception->getMessage());
+      $this->assertSame('Block 999 does not exist or is not accessible.', $exception->getMessage());
     }
 
     $denied = $this->container->get('entity_type.manager')->getStorage('block_content')->loadByProperties(['info' => 'Denied block']);
@@ -239,7 +239,7 @@ final class ReadToolSurfaceKernelTest extends KernelTestBase {
       $this->fail('Expected an inaccessible block rejection.');
     }
     catch (ToolCallException $exception) {
-      $this->assertSame(sprintf('Block %d is not accessible.', (int) $deniedBlock->id()), $exception->getMessage());
+      $this->assertSame(sprintf('Block %d does not exist or is not accessible.', (int) $deniedBlock->id()), $exception->getMessage());
     }
 
     $accessibles = $this->container->get('entity_type.manager')->getStorage('block_content')->loadByProperties(['info' => 'Visible block']);
@@ -300,7 +300,7 @@ final class ReadToolSurfaceKernelTest extends KernelTestBase {
       $this->fail('Expected an inaccessible term rejection.');
     }
     catch (ToolCallException $exception) {
-      $this->assertSame(sprintf('Term %d is not accessible.', (int) $deniedTerm->id()), $exception->getMessage());
+      $this->assertSame(sprintf('Term %d does not exist or is not accessible.', (int) $deniedTerm->id()), $exception->getMessage());
     }
 
     $hiddenTerms = $this->container->get('entity_type.manager')->getStorage('taxonomy_term')->loadByProperties(['name' => 'Hidden tag']);
@@ -389,7 +389,7 @@ final class ReadToolSurfaceKernelTest extends KernelTestBase {
       $this->fail('Expected a nonexistent file rejection.');
     }
     catch (ToolCallException $exception) {
-      $this->assertSame('File 999 does not exist.', $exception->getMessage());
+      $this->assertSame('File 999 does not exist or is not accessible.', $exception->getMessage());
     }
 
     $deniedFiles = $this->container->get('entity_type.manager')->getStorage('file')->loadByProperties(['filename' => 'secret.txt']);
@@ -401,7 +401,7 @@ final class ReadToolSurfaceKernelTest extends KernelTestBase {
       $this->fail('Expected an inaccessible file rejection.');
     }
     catch (ToolCallException $exception) {
-      $this->assertSame(sprintf('File %d is not accessible.', (int) $deniedFile->id()), $exception->getMessage());
+      $this->assertSame(sprintf('File %d does not exist or is not accessible.', (int) $deniedFile->id()), $exception->getMessage());
     }
 
     $accessibleFiles = $this->container->get('entity_type.manager')->getStorage('file')->loadByProperties(['filename' => 'report.txt']);

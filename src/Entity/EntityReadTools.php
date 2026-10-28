@@ -24,8 +24,8 @@ use Mcp\Schema\ToolAnnotations;
  * everything recurring — the strict schema wrapper (cursor + limit +
  * filters), argument unpacking, page-size clamping, the cursor-context
  * binding (seed plus every declared filter value, so a cursor from one
- * filter combination never serves another), the not-found and view-access
- * denials, and the response envelopes. Lists always page in entity-id order
+ * filter combination never serves another), the shared not-found/view-access
+ * denial, and the response envelopes. Lists always page in entity-id order
  * taken from the entity type definition, and every condition is applied
  * through the entity query's parameterized condition API with a fixed
  * operator allowlist.
@@ -155,13 +155,13 @@ final class EntityReadTools {
    * @param string $entityTypeId
    *   Entity type id being read.
    * @param string $label
-   *   Human label used in the not-found and not-accessible messages.
+   *   Human label used in the shared not-found or not-accessible denial.
    * @param array<string> $extraPermissions
    *   Additional Drupal permissions required beyond the family gates.
    * @param callable|null $guard
    *   Rejects the loaded entity after the view-access check, e.g. bundle
    *   allowlists, so callers without view access never learn allowlist
-   *   details or existence beyond the standard not-accessible denial.
+   *   details or existence beyond the shared denial.
    * @param callable|null $project
    *   Produces the response; defaults to the entity-projection envelope
    *   (item metadata, field values, withheld fields).
@@ -364,14 +364,12 @@ final class EntityReadTools {
     ?callable $guard,
     ?callable $project,
   ): array {
+    // Missing and inaccessible entities share one denial so callers cannot
+    // enumerate which ids exist. View access is checked before the bundle
+    // guard so a caller without access cannot probe allowlist state either.
     $loaded = $this->entityTypeManager->getStorage($entityTypeId)->load($id);
-    if ($loaded === NULL) {
-      throw new ToolCallException(sprintf('%s %d does not exist.', $label, $id));
-    }
-    // View access is checked before the bundle guard so a caller without
-    // access cannot probe allowlist state one id at a time.
-    if (!$loaded->access('view', $caller)) {
-      throw new ToolCallException(sprintf('%s %d is not accessible.', $label, $id));
+    if ($loaded === NULL || !$loaded->access('view', $caller)) {
+      throw new ToolCallException(sprintf('%s %d does not exist or is not accessible.', $label, $id));
     }
     if ($guard !== NULL) {
       $guard($loaded);

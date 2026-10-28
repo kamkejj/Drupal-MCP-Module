@@ -192,13 +192,13 @@ final class EntityToolAccessKernelTest extends KernelTestBase {
     }
     catch (ToolCallException $exception) {
       $this->assertSame(
-        sprintf('Content item %d is not accessible.', (int) $unlistedNode->id()),
+        sprintf('Content item %d does not exist or is not accessible.', (int) $unlistedNode->id()),
         $exception->getMessage(),
       );
     }
 
     $this->expectException(ToolCallException::class);
-    $this->expectExceptionMessage(sprintf('Content item %d is not accessible.', $this->deniedNode->id()));
+    $this->expectExceptionMessage(sprintf('Content item %d does not exist or is not accessible.', $this->deniedNode->id()));
     $this->callTool('Drupal\\drupal_mcp\\Tool\\ContentToolProvider', 'drupal_content_get', [
       'id' => (int) $this->deniedNode->id(),
     ]);
