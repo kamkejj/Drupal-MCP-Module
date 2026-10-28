@@ -277,11 +277,13 @@ not be committed. Rotate or delete these credentials after testing.
 ## Automated tests
 
 Run the module's PHPUnit suite (unit, kernel, and functional tests; kernel and
-functional tests need the test database and base URL):
+functional tests need the test database and base URL). The base URL is
+resolved inside the web container, so it targets the container's own web
+server rather than the public DDEV hostname and router port:
 
 ```shell
 ddev exec env SIMPLETEST_DB="mysql://db:db@db/db" \
-  SIMPLETEST_BASE_URL="https://drupalmcp.ddev.site:30001" \
+  SIMPLETEST_BASE_URL="http://localhost" \
   vendor/bin/phpunit -c web/modules/custom/drupal_mcp/phpunit.xml.dist
 ```
 

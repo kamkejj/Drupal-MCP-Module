@@ -117,7 +117,7 @@ Run the module suite and the independent-client conformance harness:
 
 ```shell
 ddev exec env SIMPLETEST_DB="mysql://db:db@db/db" \
-  SIMPLETEST_BASE_URL="https://drupalmcp.ddev.site" \
+  SIMPLETEST_BASE_URL="http://localhost" \
   vendor/bin/phpunit -c web/modules/custom/drupal_mcp/phpunit.xml.dist
 
 web/modules/custom/drupal_mcp/tests/conformance/run.sh
