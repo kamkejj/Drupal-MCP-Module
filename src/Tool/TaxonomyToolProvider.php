@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Tool;
 
 use Drupal\taxonomy\VocabularyInterface;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\drupal_mcp\Entity\EntityReadTools;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
@@ -16,6 +15,7 @@ use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Drupal\taxonomy\TermInterface;
 use Mcp\Exception\ToolCallException;
 use Mcp\Schema\ToolAnnotations;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Taxonomy vocabulary and term inspection tools.
@@ -27,7 +27,7 @@ final class TaxonomyToolProvider implements ToolProviderInterface {
 
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly EntityReadTools $reads,
   ) {}
 
@@ -160,7 +160,7 @@ final class TaxonomyToolProvider implements ToolProviderInterface {
    *   The operation result.
    */
   private function enabledVocabularies(): array {
-    return array_values((array) ($this->configFactory->get('drupal_mcp.settings')->get('vocabularies') ?? []));
+    return $this->settings->vocabularies();
   }
 
 }

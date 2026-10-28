@@ -89,8 +89,9 @@ final class TaxonomyMutationKernelTest extends KernelTestBase {
     $this->createUser('root-placeholder', []);
     $this->writer = $this->createUser('writer', ['mcp_writer']);
     $this->container->get('config.factory')->getEditable('drupal_mcp.settings')
-      ->set('mutation_families.taxonomy', TRUE)
-      ->set('writable_vocabularies', ['tags', 'article'])
+      ->set('families.taxonomy_mutation', TRUE)
+      ->set('taxonomy.vocabularies', ['tags', 'article'])
+      ->set('taxonomy.writable_vocabularies', ['tags', 'article'])
       ->save();
     $this->mutator = $this->container->get('drupal_mcp.taxonomy_term_mutator');
   }
@@ -119,9 +120,9 @@ final class TaxonomyMutationKernelTest extends KernelTestBase {
     $this->assertSame('article', $article['vocabulary']);
     $this->assertSame('PHP', $article['fields']['name']);
 
-    $this->config('drupal_mcp.settings')->set('mutation_families.taxonomy', FALSE)->save();
+    $this->config('drupal_mcp.settings')->set('families.taxonomy_mutation', FALSE)->save();
     $this->assertCreateFailure('mutation_disabled', ['vocabulary' => 'tags', 'name' => 'Disabled']);
-    $this->config('drupal_mcp.settings')->set('mutation_families.taxonomy', TRUE)->save();
+    $this->config('drupal_mcp.settings')->set('families.taxonomy_mutation', TRUE)->save();
     $this->assertCreateFailure('target_not_writable', ['vocabulary' => 'readonly', 'name' => 'No']);
     $this->assertCreateFailure('target_not_writable', ['vocabulary' => 'unknown', 'name' => 'No']);
   }

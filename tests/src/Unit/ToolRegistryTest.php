@@ -14,6 +14,7 @@ use Drupal\Tests\drupal_mcp\Unit\Fixtures\ConfigFactoryStub;
 use Drupal\Tests\drupal_mcp\Unit\Fixtures\ToolProviderStub;
 use Psr\Log\NullLogger;
 use PHPUnit\Framework\TestCase;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Tests per-request tool visibility.
@@ -24,11 +25,11 @@ final class ToolRegistryTest extends TestCase {
    * Tests non-token accounts fail closed and definitions default to read.
    */
   public function testNonTokenAccountsFailClosedAndCapabilityDefaultsToRead(): void {
-    $settings = new ConfigFactoryStub([
-      'drupal_mcp.settings' => [
+    $settings = new Settings(new ConfigFactoryStub([
+      Settings::NAME => [
         'families' => ['drush' => TRUE, 'database' => FALSE],
       ],
-    ]);
+    ]));
     $provider = new ToolProviderStub([
       new ToolDefinition('visible', 'Visible', 'Visible tool.', [], fn (array $arguments, TokenAuthUser $caller): array => [], ToolFamily::Drush),
       new ToolDefinition(

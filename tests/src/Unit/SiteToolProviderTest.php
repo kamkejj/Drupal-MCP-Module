@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Drupal\Tests\drupal_mcp\Unit;
 
 use Drupal\Core\Routing\UrlGeneratorInterface;
-use Drupal\drupal_mcp\Access\McpAccessPolicy;
 use Drupal\drupal_mcp\Tool\SiteToolProvider;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Drupal\Tests\drupal_mcp\Unit\Fixtures\ConfigFactoryStub;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\NullLogger;
 
 /**
  * Tests the public site identity tool.
@@ -37,7 +35,6 @@ final class SiteToolProviderTest extends TestCase {
       ->willReturn('https://example.com/drupal/');
     $provider = new SiteToolProvider(
       $configFactory,
-      new McpAccessPolicy($configFactory, new NullLogger()),
       $urlGenerator,
     );
     $tools = $provider->tools();
@@ -49,7 +46,8 @@ final class SiteToolProviderTest extends TestCase {
     $this->assertSame('Example slogan', $result['site_slogan']);
     $this->assertSame('en', $result['default_langcode']);
     $this->assertSame('standard', $result['install_profile']);
-    $this->assertTrue($result['mcp']['read_only']);
+    $this->assertSame('mcp:read', $result['mcp']['read_scope']);
+    $this->assertSame('mcp:write', $result['mcp']['write_scope']);
     $this->assertArrayNotHasKey('mail', $result);
     $this->assertStringNotContainsString('private@example.com', json_encode($result, JSON_THROW_ON_ERROR));
   }

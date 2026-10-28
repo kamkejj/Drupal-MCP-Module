@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Tool;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\drupal_mcp\Entity\EntityReadTools;
 use Drupal\drupal_mcp\Mcp\ToolFamily;
 use Drupal\drupal_mcp\Mcp\ToolProviderInterface;
 use Drupal\node\NodeInterface;
 use Mcp\Exception\ToolCallException;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Content (node) read tools bounded by the node bundle allowlist.
@@ -17,7 +17,7 @@ use Mcp\Exception\ToolCallException;
 final class ContentToolProvider implements ToolProviderInterface {
 
   public function __construct(
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly EntityReadTools $reads,
   ) {}
 
@@ -73,7 +73,7 @@ final class ContentToolProvider implements ToolProviderInterface {
    * Rejects node types outside the read allowlist.
    */
   private function assertExposedType(?string $type): void {
-    $enabled = array_values((array) ($this->configFactory->get('drupal_mcp.settings')->get('node_bundles') ?? []));
+    $enabled = $this->settings->nodeBundles();
     if ($type === NULL || !\in_array($type, $enabled, TRUE)) {
       throw new ToolCallException(sprintf('Content type "%s" is not exposed through MCP.', (string) $type));
     }

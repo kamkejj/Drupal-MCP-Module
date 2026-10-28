@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Mutation;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldDefinitionInterface;
@@ -13,6 +12,8 @@ use Drupal\Core\Session\AccountInterface;
 use Drupal\filter\FilterFormatInterface;
 use Drupal\node\NodeInterface;
 use Psr\Log\LoggerInterface;
+use Drupal\drupal_mcp\Mcp\ToolFamily;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Owns the complete policy and persistence boundary for node mutations.
@@ -31,7 +32,7 @@ final class NodeMutator implements EntityMutatorInterface {
 
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly LockBackendInterface $lock,
     private readonly LoggerInterface $logger,
   ) {}
@@ -253,12 +254,10 @@ final class NodeMutator implements EntityMutatorInterface {
    * Enforces fail-closed mutation and bundle configuration.
    */
   private function assertEnabledBundle(string $bundle): void {
-    $settings = $this->configFactory->get('drupal_mcp.settings');
-    if (!(bool) $settings->get('mutation_families.node')) {
+    if (!$this->settings->familyEnabled(ToolFamily::NodeMutation)) {
       throw $this->failure('mutation_disabled', 'Node mutations are disabled.');
     }
-    $allowed = array_values((array) ($settings->get('writable_node_bundles') ?? []));
-    if (!\in_array($bundle, $allowed, TRUE)) {
+    if (!\in_array($bundle, $this->settings->writableNodeBundles(), TRUE)) {
       throw $this->failure('target_not_writable', 'The content type is not writable through MCP.');
     }
   }

@@ -3,7 +3,8 @@
 [![CI](https://github.com/kamkejj/Drupal-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/kamkejj/Drupal-MCP/actions/workflows/ci.yml)
 
 This module exposes Drupal through a bounded Model Context Protocol (MCP)
-server at `https://drupalmcp.ddev.site/mcp`. It lets authenticated MCP clients
+server at `/mcp` on your site's HTTPS origin (for example,
+`https://drupalmcp.ddev.site:30001/mcp` in the local DDEV environment). It lets authenticated MCP clients
 inspect selected site data and structure, run explicitly approved diagnostics,
 and perform narrowly allowlisted taxonomy and content mutations. Every request requires a
 Simple OAuth bearer token associated with an active Drupal user; OAuth scopes
@@ -69,6 +70,181 @@ The current release requires the security and protocol patches listed in
 module's patch manifest. The CI workflow installs the module into a clean
 Drupal project and fails if any required patch no longer applies.
 
+## OAuth setup in Drupal administration
+
+Complete these steps before authorizing an MCP client. Enabling the module alone
+does not provision signing keys, OAuth scopes, or a registered client. Use an
+administrator account for setup; use a dedicated non-administrator account for
+normal MCP access.
+
+### 1. Confirm the site and canonical endpoint
+
+Install the required Composer patches above, enable `drupal_mcp` and its
+Simple OAuth dependencies, and ensure the site is reachable over trusted HTTPS.
+Apply outstanding database updates after upgrading the module.
+
+At **Configuration > Web services > Drupal MCP settings**
+(`/admin/config/services/drupal-mcp`), set **Canonical MCP resource URI** to the
+exact external endpoint, including any nonstandard port:
+
+```text
+https://drupalmcp.ddev.site:30001/mcp
+```
+
+Use your actual hostname and port everywhere below. Do not omit `:30001` when
+that is how the site is reached. Drupal trusted-host configuration must permit
+the hostname. Leave resource binding set to **Require**; changing it to Audit
+is not a fix for a mismatched URL.
+
+### 2. Configure OAuth signing keys
+
+Open **Configuration > People > Simple OAuth**
+(`/admin/config/people/simple_oauth`). Configure **Public Key** and **Private
+Key** with absolute paths readable by Drupal's PHP runtime, outside the web root.
+For local DDEV, a suitable directory is:
+
+```text
+/var/www/html/secrets/simple_oauth
+```
+
+Create the directory first with restrictive permissions. Click **Generate keys**,
+enter that directory under **Directory for the keys**, and click **Generate**.
+Save the settings with the resulting `public.key` and `private.key` paths.
+**Generation replaces existing keys in that directory**: use a new directory for
+initial setup, and plan rotation separately for an existing installation.
+Never commit keys or put them under `web/`; verify your project's ignore rules.
+
+### 3. Create scope ceilings and authorize the Drupal user
+
+At `/admin/people/roles`, create ordinary roles (not administrator roles) for
+**MCP read scope ceiling** and, if needed, **MCP write scope ceiling**. Configure
+their permissions at `/admin/people/permissions`:
+
+- Read ceiling: `access mcp read`, plus only the native read permissions required
+  by the intended tools, such as `access content`. Structural content-type tools
+  additionally require `administer content types`.
+- Write ceiling: `access mcp write`, plus only the native mutation permissions
+  required, such as `create article content`, appropriate edit permissions, and
+  access to the intended text formats. Configuration-creation tools require
+  their native configuration-administration permissions.
+
+Open `/admin/config/people/simple_oauth`, select the dynamic scope provider if
+necessary, then open `/admin/config/people/simple_oauth/oauth2_scope/dynamic`.
+Use **Add** to create a scope named **`mcp:read`** and, if writes are needed,
+**`mcp:write`**. For each scope:
+
+- Enable **Authorization Code** and **Refresh Token** under **Grant types**.
+- Select **Role** under **Granularity** and the corresponding ceiling role.
+- Save the scope. Configuration IDs such as `mcp_read` and `mcp_write` are
+  distinct from the OAuth names `mcp:read` and `mcp:write` requested by clients.
+
+Give the actual MCP user's normal role the matching MCP capability permission
+and native permissions, plus **`grant simple_oauth codes`** to complete browser
+consent. Ceiling roles need not be assigned to users: token permissions are
+bounded by both the user's permissions and the scopes. Do not use UID 1 or an
+administrator-role account to validate least-privilege scope isolation.
+
+### 4. Register the Pi client
+
+Open **Consumers** at `/admin/config/services/consumer` and add a consumer at
+`/admin/config/services/consumer/add`:
+
+- **Label**: `Pi Drupal MCP (local)`.
+- **Client ID**: `drupal-mcp` (not the consumer UUID or numeric entity ID).
+- **Grant types**: Authorization Code and Refresh Token.
+- **Is Confidential?**: unchecked; this is a public local client, without a secret.
+- Under **Authorization Code settings**, enable **Use PKCE?**.
+- **Redirect URIs**: exactly `http://127.0.0.1:19876/callback`.
+- **Scopes**: select the scopes this client is allowed to request.
+- Leave **Automatic authorization** disabled so the user explicitly consents.
+
+Save. The callback's scheme, host, port, and path must match exactly;
+`localhost` and `127.0.0.1` are not interchangeable. Other MCP clients need their
+own registration and exact callback URI.
+
+### 5. Enable only the intended MCP surfaces
+
+Return to `/admin/config/services/drupal-mcp`. Enable the intended tool families
+and select readable content types/vocabularies. For mutations, separately enable
+the relevant mutation family and writable targets; writable targets must also
+be readable. Empty allowlists enable no targets. Configuration creation has
+separate field-target/type approvals; diagnostics have additional prerequisites
+below. Save and rebuild Drupal caches:
+
+```shell
+ddev drush cr
+```
+
+OAuth scopes and client registration do not enable these surfaces or bypass
+native Drupal permissions.
+
+## Authorize Pi with `/mcp-auth drupalmcp`
+
+With `pi-mcp-adapter` installed and loaded in Pi, add the following server entry
+to `~/.pi/agent/mcp-adapter.json`, merging it with any existing servers:
+
+```json
+{
+  "mcpServers": {
+    "drupalmcp": {
+      "url": "https://drupalmcp.ddev.site:30001/mcp",
+      "caFile": "/absolute/path/to/mkcert/rootCA.pem",
+      "auth": "oauth",
+      "oauth": {
+        "grantType": "authorization_code",
+        "clientId": "drupal-mcp",
+        "redirectUri": "http://127.0.0.1:19876/callback",
+        "scope": "mcp:read mcp:write"
+      }
+    }
+  }
+}
+```
+
+For read-only clients, register and request only `mcp:read`. For local DDEV,
+replace `caFile` with the actual mkcert CA file (`mkcert -CAROOT` identifies its
+directory). Ensure the browser and the runtime performing OAuth requests also
+trust that CA. Omit `caFile` for publicly trusted certificates; never disable TLS
+verification. Local DDEV hostnames are not accessible to cloud-hosted clients.
+
+After editing the adapter configuration, run these commands **one at a time in
+Pi**, not in the shell:
+
+```text
+/reload
+```
+
+```text
+/mcp-auth drupalmcp
+```
+
+The adapter caches server definitions, so reconnecting without `/reload` can
+still use an old URL. Complete login and consent in the newly opened browser
+tab. Port `19876` must be available on the machine running Pi, and the browser
+must be able to reach its loopback callback. Ask Pi to call `drupal_site_info`
+to verify authenticated MCP access after authorization.
+
+### Setup troubleshooting
+
+- **`fetch failed` / connection refused**: verify DDEV is running and the client
+  URL uses the actual HTTPS port. Reload Pi after correcting its configuration.
+- **Protected resource does not match expected**: the client URL and Drupal's
+  canonical resource URI must agree, including the port. Rebuild Drupal caches;
+  `/.well-known/oauth-protected-resource` should advertise that exact resource.
+- **`invalid_client`**: confirm the Client ID exists and the callback matches
+  exactly. A public PKCE client must not require a client secret.
+- **“You need to set the OAuth2 private key”**: configure both signing-key paths
+  and verify PHP can read the files.
+- **Invalid scope or missing tools/access denied**: check scope registration,
+  client scope selection, user permissions, scope ceilings, enabled families,
+  and target allowlists. Write does not imply read. Obtain a new token after
+  changing requested scopes.
+- **Stale or failed authorization**: run `/mcp-auth drupalmcp` again and use the
+  current browser tab; do not reuse a previous authorization code.
+
+Anonymous `/mcp` requests returning HTTP `401` are expected and confirm only
+that the endpoint is reachable, not that OAuth setup is complete.
+
 ## Test prerequisites
 
 Start DDEV and confirm that the MCP and OAuth modules are enabled:
@@ -83,8 +259,16 @@ If the local OAuth test users, roles, scope, and PKCE client have not been
 created, run:
 
 ```shell
-ddev drush php:script scripts/mcp-oauth-setup.php
+ddev exec env MCP_BASE_URL="https://drupalmcp.ddev.site:30001" \
+  drush php:script scripts/mcp-oauth-setup.php
 ```
+
+Use the site's actual origin for `MCP_BASE_URL`; the script sets the canonical
+resource URI from it. This development-fixture script changes roles, users,
+scopes, and settings. It is not a replacement for the admin setup above: the
+project-root script registers the `mcp-inspector` client with its own callback,
+not Pi's `drupal-mcp` client, and does not configure signing keys. Review the
+script before running it on an existing site.
 
 The setup script writes generated test-user passwords to
 `secrets/mcp-test-credentials.txt`. The file is outside the web root and must
@@ -97,7 +281,7 @@ functional tests need the test database and base URL):
 
 ```shell
 ddev exec env SIMPLETEST_DB="mysql://db:db@db/db" \
-  SIMPLETEST_BASE_URL="https://drupalmcp.ddev.site" \
+  SIMPLETEST_BASE_URL="https://drupalmcp.ddev.site:30001" \
   vendor/bin/phpunit -c web/modules/custom/drupal_mcp/phpunit.xml.dist
 ```
 
@@ -193,13 +377,16 @@ process-control capabilities are unavailable.
 Use the following development settings with MCP Inspector or another client
 that supports Streamable HTTP and OAuth authorization-code flow with PKCE:
 
-- Server URL: `https://drupalmcp.ddev.site/mcp`
+- Server URL: your exact canonical endpoint, for example
+  `https://drupalmcp.ddev.site:30001/mcp`
 - OAuth client ID: `mcp-inspector`
 - Redirect URI: `http://127.0.0.1:6274/oauth/callback`
 - OAuth scope: `mcp:read` for read tools, `mcp:write` for mutations, or both
   scopes for both capabilities
 - Reader username: `mcp_reader_user`
-- Writer username: `mcp_writer_user`
+- Writer account: separately provision a user with the intended write/native
+  permissions and configure the write scope and client; do not assume the
+  project-root read-fixture script creates a writer.
 - Administrator username: `mcp_admin_user`
 - Password file: `secrets/mcp-test-credentials.txt`
 
@@ -229,44 +416,43 @@ not inherit read catalogue access.
 
 Taxonomy mutations are configured at **Administration > Configuration > Web
 services > Drupal MCP settings** (`/admin/config/services/drupal-mcp`) by an
-account with `administer site configuration`. Under **Mutations (restricted)**:
+account with `administer site configuration`:
 
-1. Enable **Enable taxonomy term mutations**.
-2. Select **Tags (tags)** under **Writable vocabularies**. This release supports
-   only the `tags` vocabulary for writes.
-3. Leave **Enable destructive taxonomy term deletion** disabled unless deletion
-   is explicitly required.
-4. Set the idempotency retention period; the default is 86,400 seconds.
+1. Under **Enabled tool families**, check **Taxonomy term create and update**.
+2. Under **Taxonomy**, select **Tags** as both readable and writable. Writable
+   vocabularies must also be readable.
+3. Leave **Allow permanent deletion** disabled unless deletion is explicitly
+   required.
+4. Optionally adjust **Idempotency retention** under **Limits**; the default is
+   86,400 seconds.
 5. Save the configuration and rebuild caches.
 
 The equivalent DDEV/Drush configuration for create and update is:
 
 ```shell
-ddev drush config:set drupal_mcp.settings mutation_families.taxonomy true -y
-ddev drush config:set drupal_mcp.settings writable_vocabularies '["tags"]' --input-format=json -y
-ddev drush config:set drupal_mcp.settings idempotency_ttl 86400 -y
+ddev drush config:set drupal_mcp.settings families.taxonomy_mutation true -y
+ddev drush config:set drupal_mcp.settings taxonomy.writable_vocabularies '["tags"]' --input-format=json -y
 ddev drush cr
 ```
 
 Enable deletion separately only when needed:
 
 ```shell
-ddev drush config:set drupal_mcp.settings destructive_mutations.taxonomy_terms true -y
+ddev drush config:set drupal_mcp.settings taxonomy.allow_term_delete true -y
 ddev drush cr
 ```
 
 Verify the effective settings with:
 
 ```shell
-ddev drush config:get drupal_mcp.settings mutation_families
-ddev drush config:get drupal_mcp.settings writable_vocabularies
-ddev drush config:get drupal_mcp.settings destructive_mutations
+ddev drush config:get drupal_mcp.settings families
+ddev drush config:get drupal_mcp.settings taxonomy
 ```
 
 `drupal_term_create` and `drupal_term_update` are exposed only after the
 taxonomy mutation family is enabled and `tags` is writable.
 `drupal_term_delete` is advertised only when
-`destructive_mutations.taxonomy_terms` is also enabled. Every operation still
+`taxonomy.allow_term_delete` is also enabled. Every operation still
 requires an `mcp:write` token, `access mcp write`, and applicable native Drupal
 entity, field, and text-format access; configuration never bypasses those
 checks.
@@ -277,16 +463,16 @@ confirmation and refuses to delete referenced terms.
 
 ## Content (node) mutations
 
-Node mutations are configured at the same settings form under **Mutations
-(restricted)**: enable **Enable content (node) mutations**, then select writable
-node bundles. Only bundles already listed under **Enabled node bundles** are
-selectable, so the writable set is always a subset of the exposed set. The
+Node mutations are configured at the same settings form: check **Content create
+and update** under **Enabled tool families**, then select writable content
+types under **Content**. Writable types must also be readable, so the writable
+set is always a subset of the exposed set. The
 equivalent DDEV/Drush configuration is:
 
 ```shell
-ddev drush config:set drupal_mcp.settings node_bundles '["article"]' --input-format=json -y
-ddev drush config:set drupal_mcp.settings mutation_families.node true -y
-ddev drush config:set drupal_mcp.settings writable_node_bundles '["article"]' --input-format=json -y
+ddev drush config:set drupal_mcp.settings content.bundles '["article"]' --input-format=json -y
+ddev drush config:set drupal_mcp.settings families.node_mutation true -y
+ddev drush config:set drupal_mcp.settings content.writable_bundles '["article"]' --input-format=json -y
 ddev drush cr
 ```
 

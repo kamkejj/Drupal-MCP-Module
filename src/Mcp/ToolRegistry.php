@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Mcp;
 
 use Mcp\Exception\ToolCallException;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\drupal_mcp\Settings;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Psr\Log\LoggerInterface;
 
@@ -21,15 +21,15 @@ final class ToolRegistry {
   /**
    * Initializes the registry.
    *
-   * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
-   *   Configuration factory providing enabled tool-family settings.
+   * @param \Drupal\drupal_mcp\Settings $settings
+   *   Module settings providing enabled tool families.
    * @param \Drupal\drupal_mcp\Mcp\ToolProviderInterface[] $providers
    *   Tagged tool provider services.
    * @param \Psr\Log\LoggerInterface $logger
    *   Logger for denied tool executions.
    */
   public function __construct(
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly iterable $providers,
     private readonly LoggerInterface $logger,
   ) {}
@@ -39,9 +39,9 @@ final class ToolRegistry {
    *
    * A tool is visible when its family is enabled in settings, the token has
    * the scope and account permission required by its operation capability,
-   * and the account holds every additional Drupal permission. Visibility only
-   * shapes
-   * tools/list: execution re-checks access again.
+   * and the account holds every additional Drupal permission. Only these
+   * tools are registered with the SDK, so they bound both tools/list and
+   * tools/call.
    *
    * @return \Drupal\drupal_mcp\Mcp\ToolDefinition[]
    *   Definitions keyed by tool name.
@@ -51,22 +51,16 @@ final class ToolRegistry {
       return [];
     }
 
-    $settings = $this->configFactory->get('drupal_mcp.settings');
-    $grantedScopes = [];
-    foreach ($account->getToken()->get('scopes')->getScopes() as $scope) {
-      $grantedScopes[] = $scope->getName();
+    // Each capability is resolved once per request, not once per tool.
+    $granted = [];
+    foreach (OperationCapability::cases() as $capability) {
+      $granted[$capability->value] = $capability->isGrantedTo($account);
     }
 
     $tools = [];
     foreach ($this->providers as $provider) {
       foreach ($provider->tools() as $definition) {
-        if (!(bool) ($settings->get($definition->family->settingsKey()) ?? FALSE)) {
-          continue;
-        }
-        $capability = $definition->capability;
-        $requiredScope = $capability->resolveScope($this->configFactory);
-        if (!\in_array($requiredScope, $grantedScopes, TRUE)
-          || !$account->hasPermission($capability->permission())) {
+        if (!$this->settings->familyEnabled($definition->family) || !$granted[$definition->capability->value]) {
           continue;
         }
         foreach ($definition->extraPermissions as $permission) {

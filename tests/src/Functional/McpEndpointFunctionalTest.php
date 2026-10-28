@@ -168,7 +168,6 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
     $this->config('drupal_mcp.settings')
       ->set('resource_uri', $this->baseUrl . '/mcp')
       ->set('resource_binding', 'require')
-      ->set('read_scope', 'mcp:read')
       ->set('allowed_origins', [self::ALLOWED_ORIGIN])
       ->set('allowed_hosts', [
         parse_url($this->baseUrl, PHP_URL_HOST),
@@ -337,10 +336,11 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
    */
   public function testWriteScopeCatalogueIsolation(): void {
     $this->config('drupal_mcp.settings')
-      ->set('mutation_families.taxonomy', TRUE)
-      ->set('writable_vocabularies', ['tags'])
-      ->set('mutation_families.node', TRUE)
-      ->set('writable_node_bundles', ['article'])
+      ->set('families.taxonomy_mutation', TRUE)
+      ->set('taxonomy.writable_vocabularies', ['tags'])
+      ->set('families.node_mutation', TRUE)
+      ->set('content.bundles', ['article'])
+      ->set('content.writable_bundles', ['article'])
       ->save();
 
     $readerTokens = $this->authorizeToken();
@@ -367,8 +367,8 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
   public function testRequestLimit(): void {
     $tokens = $this->authorizeToken();
     $this->config('drupal_mcp.settings')
-      ->set('flood_limit', 2)
-      ->set('flood_window', 3600)
+      ->set('limits.flood_limit', 2)
+      ->set('limits.flood_window', 3600)
       ->save();
 
     for ($requestId = 11; $requestId <= 12; $requestId++) {
@@ -388,7 +388,7 @@ final class McpEndpointFunctionalTest extends TokenBearerFunctionalTestBase {
   public function testRequestBodyLimit(): void {
     $tokens = $this->authorizeToken();
     $this->config('drupal_mcp.settings')
-      ->set('max_body_bytes', 1024)
+      ->set('limits.max_body_bytes', 1024)
       ->save();
 
     $oversized = $this->modernBody(14, 'tools/list') . str_repeat(' ', 1024);

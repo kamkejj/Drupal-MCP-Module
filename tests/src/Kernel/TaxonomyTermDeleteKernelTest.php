@@ -12,6 +12,7 @@ use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\user\Entity\Role;
 use Drupal\user\Entity\User;
 use PHPUnit\Framework\Attributes\Group;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Tests guarded taxonomy term deletion against real entity storage.
@@ -52,14 +53,14 @@ final class TaxonomyTermDeleteKernelTest extends KernelTestBase {
     $this->installConfig(['system', 'user', 'filter', 'taxonomy', 'drupal_mcp']);
     Vocabulary::create(['vid' => 'tags', 'name' => 'Tags'])->save();
     $this->container->get('config.factory')->getEditable('drupal_mcp.settings')
-      ->set('mutation_families.taxonomy', TRUE)
-      ->set('writable_vocabularies', ['tags'])
-      ->set('destructive_mutations.taxonomy_terms', TRUE)
+      ->set('families.taxonomy_mutation', TRUE)
+      ->set('taxonomy.writable_vocabularies', ['tags'])
+      ->set('taxonomy.allow_term_delete', TRUE)
       ->save();
     $this->mutator = new TaxonomyTermMutator(
       $this->container->get('entity_type.manager'),
       $this->container->get('entity_field.manager'),
-      $this->container->get('config.factory'),
+      $this->container->get(Settings::class),
       $this->container->get('lock'),
       $this->container->get('logger.channel.drupal_mcp'),
     );

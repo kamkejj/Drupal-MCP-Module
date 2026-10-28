@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Mcp;
 
 use Drupal\Core\Extension\ModuleExtensionList;
+use Drupal\drupal_mcp\Settings;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Mcp\Capability\Registry\ReferenceHandler;
 use Mcp\Server;
@@ -26,7 +27,7 @@ final class ServerFactory {
     private readonly SessionStore $sessionStore,
     private readonly LoggerInterface $logger,
     private readonly ModuleExtensionList $moduleExtensionList,
-    private readonly Limits $limits,
+    private readonly Settings $settings,
   ) {}
 
   /**
@@ -44,7 +45,7 @@ final class ServerFactory {
       )
       ->setInstructions('Inspect permitted site data and use only explicitly enabled mutation tools. Available tools are filtered for the authenticated account.')
       ->setSession($this->sessionStore->forAccount($caller))
-      ->setPaginationLimit($this->limits->maximum())
+      ->setPaginationLimit($this->settings->pageSize())
       ->setLogger($this->logger);
 
     foreach ($this->toolRegistry->toolsForAccount($caller) as $definition) {

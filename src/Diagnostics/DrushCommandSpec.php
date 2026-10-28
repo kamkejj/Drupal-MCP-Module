@@ -26,10 +26,11 @@ final class DrushCommandSpec {
    * @param array<string, array<string, mixed>> $parameters
    *   JSON-Schema fragment per accepted parameter name.
    * @param \Closure $argv
-   *   Fn(array $arguments, array $settings): ?list<string> — builds the
-   *   fixed argv tail from validated arguments, or NULL to refuse.
+   *   Fn(array $arguments, \Drupal\drupal_mcp\Settings $settings):
+   *   ?list<string> — builds the fixed argv tail from validated arguments,
+   *   or NULL to refuse.
    * @param \Closure $project
-   *   fn(array $parsedOutput, array $arguments, array $settings): array —
+   *   fn(array $parsedOutput, array $arguments): array —
    *   allowlist projection of parsed JSON output. Keys not carried over are
    *   dropped.
    */

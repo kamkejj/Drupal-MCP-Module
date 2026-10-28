@@ -38,6 +38,72 @@ function drupal_mcp_update_11002(): void {
 }
 
 /**
+ * Regroups settings by subject and unifies family toggles.
+ *
+ * Mutation families join the "families" map, allowlists move under their
+ * subject, limits move under "limits", and the fixed OAuth scope names are
+ * no longer configurable. Exposure is preserved exactly.
+ */
+function drupal_mcp_update_11003(): void {
+  $config = \Drupal::configFactory()->getEditable('drupal_mcp.settings');
+  $old = $config->getRawData();
+  if (isset($old['limits'])) {
+    return;
+  }
+  $list = static fn (string $key): array => array_values((array) ($old[$key] ?? []));
+  $resourceHost = strtolower((string) parse_url((string) ($old['resource_uri'] ?? ''), PHP_URL_HOST));
+
+  $families = array_map('boolval', (array) ($old['families'] ?? []));
+  foreach (['node', 'taxonomy', 'configuration'] as $family) {
+    $families[$family . '_mutation'] = (bool) ($old['mutation_families'][$family] ?? FALSE);
+  }
+
+  $new = [
+    'resource_uri' => (string) ($old['resource_uri'] ?? ''),
+    'resource_binding' => ($old['resource_binding'] ?? 'require') === 'audit' ? 'audit' : 'require',
+    // The resource URI host is now always allowed; keep only the extras.
+    'allowed_hosts' => array_values(array_filter(
+      $list('allowed_hosts'),
+      static fn (string $host): bool => strtolower($host) !== $resourceHost,
+    )),
+    'allowed_origins' => $list('allowed_origins'),
+    'limits' => [
+      'page_size' => (int) ($old['pagination_limit'] ?? 20),
+      'max_body_bytes' => (int) ($old['max_body_bytes'] ?? 1048576),
+      'session_ttl' => (int) ($old['session_ttl'] ?? 3600),
+      'idempotency_ttl' => (int) ($old['idempotency_ttl'] ?? 86400),
+      'flood_limit' => (int) ($old['flood_limit'] ?? 240),
+      'flood_window' => (int) ($old['flood_window'] ?? 3600),
+    ],
+    'families' => $families,
+    'content' => [
+      'bundles' => $list('node_bundles'),
+      'writable_bundles' => $list('writable_node_bundles'),
+    ],
+    'taxonomy' => [
+      'vocabularies' => $list('vocabularies'),
+      'writable_vocabularies' => $list('writable_vocabularies'),
+      'allow_term_delete' => (bool) ($old['destructive_mutations']['taxonomy_terms'] ?? FALSE),
+    ],
+    'configuration' => [
+      'field_targets' => $list('configuration_field_targets'),
+      'field_types' => $list('configuration_field_types'),
+    ],
+    'drush' => [
+      'commands' => $list('drush_commands'),
+      'config_names' => $list('drush_config_names'),
+    ],
+    'database' => [
+      'surfaces' => $list('database_surfaces'),
+    ],
+  ];
+  if (isset($old['_core'])) {
+    $new['_core'] = $old['_core'];
+  }
+  $config->setData($new)->save(TRUE);
+}
+
+/**
  * Removes only module-owned operational idempotency state.
  */
 function drupal_mcp_uninstall(): void {

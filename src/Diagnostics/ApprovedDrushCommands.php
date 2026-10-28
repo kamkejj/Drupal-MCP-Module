@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Diagnostics;
 
+use Drupal\drupal_mcp\Settings;
+
 /**
  * The server-defined catalogue of approvable Drush diagnostics.
  *
  * Nothing here executes anything; it only describes fixed contracts. A
  * command becomes callable when its ID is additionally enabled in the
- * drupal_mcp.settings "drush_commands" list (fail closed by default).
+ * drupal_mcp.settings "drush.commands" list (fail closed by default).
  *
  * Each projection keeps only explicitly allowlisted, non-sensitive output:
  * no database credentials, tokens, private configuration, environment
@@ -31,7 +33,7 @@ final class ApprovedDrushCommands {
       drushCommand: 'status',
       description: 'Drush status: versions, bootstrap and database connectivity state. No credentials, hosts, or paths.',
       parameters: [],
-      argv: fn (array $arguments, array $settings): ?array => [],
+      argv: fn (array $arguments, Settings $settings): ?array => [],
       project: fn (array $out): array => self::pick($out, [
         'drupal-version', 'drush-version', 'php-version', 'bootstrap',
         'db-driver', 'db-status', 'db-server', 'theme-default', 'theme-admin',
@@ -50,7 +52,7 @@ final class ApprovedDrushCommands {
           'description' => 'Optional filter by extension type.',
         ],
       ],
-      argv: function (array $arguments, array $settings): ?array {
+      argv: function (array $arguments, Settings $settings): ?array {
         $argv = ['--format=json'];
         $type = $arguments['type'] ?? NULL;
         if ($type !== NULL) {
@@ -75,10 +77,9 @@ final class ApprovedDrushCommands {
           'description' => 'Approved configuration object name.',
         ],
       ],
-      argv: function (array $arguments, array $settings): ?array {
-        $approved = (array) ($settings['drush_config_names'] ?? []);
+      argv: function (array $arguments, Settings $settings): ?array {
         $name = (string) ($arguments['name'] ?? '');
-        if ($name === '' || !ApprovedConfigProjections::supports($name) || !\in_array($name, $approved, TRUE)) {
+        if ($name === '' || !ApprovedConfigProjections::supports($name) || !\in_array($name, $settings->drushConfigNames(), TRUE)) {
           return NULL;
         }
         return [$name, '--format=json'];

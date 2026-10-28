@@ -11,6 +11,7 @@ use Drupal\Core\Lock\NullLockBackend;
 use Drupal\Core\PrivateKey;
 use Drupal\Core\State\StateInterface;
 use Drupal\drupal_mcp\Idempotency\IdempotencyManager;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Builds a real IdempotencyManager over an in-memory store.
@@ -259,7 +260,7 @@ final class StubIdempotencyManager {
       $factory,
       new NullLockBackend(),
       $time,
-      new ConfigFactoryStub(['drupal_mcp.settings' => ['idempotency_ttl' => 300]]),
+      new Settings(new ConfigFactoryStub([Settings::NAME => ['limits' => ['idempotency_ttl' => 300]]])),
       new PrivateKey(new class() implements StateInterface {
 
         /**

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Tool;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
@@ -15,6 +14,7 @@ use Drupal\drupal_mcp\Mutation\EntityMutatorInterface;
 use Drupal\drupal_mcp\Mutation\MutationExecutor;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Mcp\Schema\ToolAnnotations;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Defines the narrow MCP adapter for node mutations.
@@ -24,7 +24,7 @@ final class ContentMutationToolProvider implements ToolProviderInterface {
   public function __construct(
     private readonly EntityMutatorInterface $mutator,
     private readonly MutationExecutor $executor,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly EntityFieldManagerInterface $entityFieldManager,
   ) {}
 
@@ -33,12 +33,7 @@ final class ContentMutationToolProvider implements ToolProviderInterface {
    */
   public function tools(): array {
     $key = ToolSchema::idempotencyKey();
-    $settings = $this->configFactory->get('drupal_mcp.settings');
-    // Writable bundles are a strict subset of the bundles exposed for reads.
-    $writableBundles = array_values(array_intersect(
-      array_values((array) ($settings->get('writable_node_bundles') ?? [])),
-      array_values((array) ($settings->get('node_bundles') ?? [])),
-    ));
+    $writableBundles = $this->settings->writableNodeBundles();
     // ponytail: scalar/text/reference field mapping only; exotic field
     // types fall back to an opaque scalar slot; add typed schemas when needed.
     $fields = ['title' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 255]];

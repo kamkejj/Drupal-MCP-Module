@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Mcp;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\KeyValueStore\KeyValueExpirableFactoryInterface;
+use Drupal\drupal_mcp\Settings;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Mcp\Server\Session\SessionStoreInterface;
 use Symfony\Component\Uid\Uuid;
@@ -31,7 +31,7 @@ final class SessionStore implements SessionStoreInterface {
   public function __construct(
     private readonly KeyValueExpirableFactoryInterface $keyValueExpirable,
     private readonly TimeInterface $time,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
   ) {}
 
   /**
@@ -76,7 +76,7 @@ final class SessionStore implements SessionStoreInterface {
    */
   public function write(Uuid $id, string $data): bool {
     [$uid, $consumer] = $this->callerIdentity();
-    $ttl = max(60, (int) $this->configFactory->get('drupal_mcp.settings')->get('session_ttl'));
+    $ttl = $this->settings->sessionTtl();
     $this->keyValueExpirable->get(self::COLLECTION)->setWithExpire(
       $id->toRfc4122(),
       ['uid' => $uid, 'consumer' => $consumer, 'data' => $data, 'created' => $this->time->getRequestTime()],

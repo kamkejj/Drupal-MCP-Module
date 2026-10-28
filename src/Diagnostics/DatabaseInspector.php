@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Diagnostics;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Lock\LockBackendInterface;
-use Drupal\drupal_mcp\Mcp\Limits;
+use Drupal\drupal_mcp\Settings;
 use Drupal\drupal_mcp\Mcp\SignedCursor;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Mcp\Exception\ToolCallException;
@@ -27,8 +26,7 @@ final class DatabaseInspector {
 
   public function __construct(
     private readonly ReadOnlyDatabaseConnection $connection,
-    private readonly ConfigFactoryInterface $configFactory,
-    private readonly Limits $limits,
+    private readonly Settings $settings,
     private readonly RequestStack $requestStack,
     private readonly LoggerInterface $logger,
     private readonly LockBackendInterface $lock,
@@ -172,7 +170,7 @@ final class DatabaseInspector {
         throw new ToolCallException('Database sort direction must be ASC or DESC.');
       }
 
-      $limit = $this->limits->clamp($requestedLimit);
+      $limit = $this->settings->clampPageSize($requestedLimit);
       $context = json_encode([$name, $columns, $filters, $sort], JSON_THROW_ON_ERROR);
       $offset = $this->cursor->decode($cursor, $context);
       $sql = sprintf(
@@ -238,7 +236,7 @@ final class DatabaseInspector {
    *   The operation result.
    */
   private function enabledSurfaces(TokenAuthUser $caller): array {
-    $approved = array_values((array) ($this->configFactory->get('drupal_mcp.settings')->get('database_surfaces') ?? []));
+    $approved = $this->settings->databaseSurfaces();
     $configured = array_intersect_key(ApprovedDatabaseSurfaces::all(), array_flip($approved));
     return array_filter(
       $configured,

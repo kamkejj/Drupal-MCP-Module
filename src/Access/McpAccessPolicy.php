@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Access;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\drupal_mcp\Authentication\BearerToken;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
+use Drupal\drupal_mcp\Settings;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -35,7 +35,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class McpAccessPolicy {
 
   public function __construct(
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly LoggerInterface $logger,
   ) {}
 
@@ -47,8 +47,8 @@ final class McpAccessPolicy {
       return $this->unauthorized($request);
     }
 
-    if (!$this->canAccessCapability($account, OperationCapability::Read)
-      && !$this->canAccessCapability($account, OperationCapability::Write)) {
+    if (!OperationCapability::Read->isGrantedTo($account)
+      && !OperationCapability::Write->isGrantedTo($account)) {
       $this->logger->info('MCP request denied: no valid MCP capability scope and permission pair.', [
         'uid' => $account->id(),
         'consumer' => $account->getConsumer()->getClientId(),
@@ -57,8 +57,8 @@ final class McpAccessPolicy {
         'The access token and authenticated user do not grant an MCP operation capability.',
         sprintf(
           'Bearer error="insufficient_scope", scope="%s %s"',
-          OperationCapability::Read->resolveScope($this->configFactory),
-          OperationCapability::Write->resolveScope($this->configFactory),
+          OperationCapability::Read->scope(),
+          OperationCapability::Write->scope(),
         ),
       );
     }
@@ -73,32 +73,6 @@ final class McpAccessPolicy {
     }
 
     return NULL;
-  }
-
-  /**
-   * Extracts the scope names granted to the request's access token.
-   *
-   * @return list<string>
-   *   The operation result.
-   */
-  public function grantedScopes(TokenAuthUser $account): array {
-    $scopes = [];
-    foreach ($account->getToken()->get('scopes')->getScopes() as $scope) {
-      $scopes[] = $scope->getName();
-    }
-    return $scopes;
-  }
-
-  /**
-   * Tests whether a token and account grant one operation capability.
-   */
-  public function canAccessCapability(AccountInterface $account, OperationCapability $capability): bool {
-    if (!$account instanceof TokenAuthUser) {
-      return FALSE;
-    }
-    $requiredScope = $capability->resolveScope($this->configFactory);
-    return \in_array($requiredScope, $this->grantedScopes($account), TRUE)
-      && $account->hasPermission($capability->permission());
   }
 
   /**
@@ -125,7 +99,7 @@ final class McpAccessPolicy {
     $claims = BearerToken::fromRequest($request)?->unsafeClaims();
 
     if (\is_array($claims)) {
-      $expected = $this->canonicalResourceUri($request);
+      $expected = $this->settings->resourceUri();
       $asStringList = static function (mixed $value): array {
         return \is_array($value) ? array_map('strval', $value) : (\is_string($value) ? [$value] : []);
       };
@@ -144,19 +118,11 @@ final class McpAccessPolicy {
     }
 
     // No verifiable resource information in the token.
-    $policy = (string) ($this->configFactory->get('drupal_mcp.settings')->get('resource_binding') ?: 'audit');
-    if ($policy === 'require') {
+    if ($this->settings->requiresResourceBinding()) {
       return 'The access token does not include an audience binding for this resource.';
     }
     $this->logger->notice('MCP access token carries no resource audience binding (interim "audit" policy).');
     return NULL;
-  }
-
-  /**
-   * The canonical absolute URI of this MCP resource.
-   */
-  public function canonicalResourceUri(Request $request): string {
-    return (string) $this->configFactory->get('drupal_mcp.settings')->get('resource_uri');
   }
 
   /**

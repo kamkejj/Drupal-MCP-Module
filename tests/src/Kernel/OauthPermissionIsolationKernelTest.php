@@ -22,6 +22,7 @@ use Drupal\user\Entity\User;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Psr\Log\NullLogger;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Tests scope ceilings and cross-user permission-cache isolation.
@@ -201,17 +202,17 @@ final class OauthPermissionIsolationKernelTest extends KernelTestBase {
       }
 
     };
-    $registry = new ToolRegistry($this->container->get('config.factory'), [$provider], new NullLogger());
+    $registry = new ToolRegistry($this->container->get(Settings::class), [$provider], new NullLogger());
     $accessPolicy = $this->container->get('drupal_mcp.access_policy');
     $this->assertInstanceOf(McpAccessPolicy::class, $accessPolicy);
 
-    $this->assertTrue($accessPolicy->canAccessCapability($accounts['read'], OperationCapability::Read));
-    $this->assertFalse($accessPolicy->canAccessCapability($accounts['read'], OperationCapability::Write));
-    $this->assertTrue($accessPolicy->canAccessCapability($accounts['write'], OperationCapability::Write));
-    $this->assertTrue($accessPolicy->canAccessCapability($accounts['both'], OperationCapability::Read));
-    $this->assertTrue($accessPolicy->canAccessCapability($accounts['both'], OperationCapability::Write));
-    $this->assertFalse($accessPolicy->canAccessCapability($accounts['neither'], OperationCapability::Read));
-    $this->assertFalse($accessPolicy->canAccessCapability($accounts['neither'], OperationCapability::Write));
+    $this->assertTrue(OperationCapability::Read->isGrantedTo($accounts['read']));
+    $this->assertFalse(OperationCapability::Write->isGrantedTo($accounts['read']));
+    $this->assertTrue(OperationCapability::Write->isGrantedTo($accounts['write']));
+    $this->assertTrue(OperationCapability::Read->isGrantedTo($accounts['both']));
+    $this->assertTrue(OperationCapability::Write->isGrantedTo($accounts['both']));
+    $this->assertFalse(OperationCapability::Read->isGrantedTo($accounts['neither']));
+    $this->assertFalse(OperationCapability::Write->isGrantedTo($accounts['neither']));
 
     $this->assertSame(['read_tool'], array_keys($registry->toolsForAccount($accounts['read'])));
     $this->assertSame(['write_tool'], array_keys($registry->toolsForAccount($accounts['write'])));

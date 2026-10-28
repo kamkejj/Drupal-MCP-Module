@@ -21,6 +21,7 @@ use Drupal\drupal_mcp\Mutation\NodeMutationException;
 use Drupal\drupal_mcp\Mutation\NodeMutator;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Tests node mutations against Drupal's real entity and access systems.
@@ -149,12 +150,13 @@ final class NodeMutationKernelTest extends KernelTestBase {
     $this->createUser('root-placeholder', []);
     $this->writer = $this->createUser('writer', ['mcp_writer']);
     $this->container->get('config.factory')->getEditable('drupal_mcp.settings')
-      ->set('mutation_families.node', TRUE)
-      ->set('writable_node_bundles', ['article'])
+      ->set('families.node_mutation', TRUE)
+      ->set('content.bundles', ['article'])
+      ->set('content.writable_bundles', ['article'])
       ->save();
     $this->mutator = new NodeMutator(
       $this->container->get('entity_type.manager'),
-      $this->container->get('config.factory'),
+      $this->container->get(Settings::class),
       $this->container->get('lock'),
       $this->container->get('logger.channel.drupal_mcp'),
     );
@@ -186,7 +188,7 @@ final class NodeMutationKernelTest extends KernelTestBase {
 
     $this->assertCreateFailure('target_not_writable', ['type' => 'page', 'title' => 'No']);
     $this->assertCreateFailure('target_not_writable', ['type' => 'missing', 'title' => 'No']);
-    $this->config('drupal_mcp.settings')->set('mutation_families.node', FALSE)->save();
+    $this->config('drupal_mcp.settings')->set('families.node_mutation', FALSE)->save();
     $this->assertCreateFailure('mutation_disabled', ['type' => 'article', 'title' => 'Disabled']);
   }
 

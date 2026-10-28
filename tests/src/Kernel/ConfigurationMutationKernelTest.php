@@ -67,9 +67,9 @@ final class ConfigurationMutationKernelTest extends KernelTestBase {
     $caller = $this->tokenCaller($user);
     $mutator = $this->container->get(ConfigurationMutator::class);
     $this->config('drupal_mcp.settings')
-      ->set('mutation_families.configuration', TRUE)
-      ->set('configuration_field_targets', ['node:story'])
-      ->set('configuration_field_types', ['text_with_summary', 'entity_reference'])
+      ->set('families.configuration_mutation', TRUE)
+      ->set('configuration.field_targets', ['node:story'])
+      ->set('configuration.field_types', ['text_with_summary', 'entity_reference'])
       ->save();
     $mutator->create($caller, 'drupal_content_type_create', ['machine_name' => 'story', 'label' => 'Story']);
     $this->assertNotNull(NodeType::load('story'));
@@ -96,7 +96,7 @@ final class ConfigurationMutationKernelTest extends KernelTestBase {
     $installed = $this->container->get('entity.last_installed_schema.repository')
       ->getLastInstalledFieldStorageDefinitions('node');
     $this->assertIsString(serialize($installed));
-    $this->assertSame([], $this->config('drupal_mcp.settings')->get('node_bundles'));
+    $this->assertSame([], $this->config('drupal_mcp.settings')->get('content.bundles'));
     $display = $this->container->get('entity_display.repository')->getFormDisplay('node', 'story');
     $this->assertSame('entity_reference_autocomplete', $display->getComponent('field_topics')['type']);
     $this->expectException(MutationException::class);
@@ -107,7 +107,7 @@ final class ConfigurationMutationKernelTest extends KernelTestBase {
    * Tests native administration permission enforcement.
    */
   public function testNativePermissionRequired(): void {
-    $this->config('drupal_mcp.settings')->set('mutation_families.configuration', TRUE)->save();
+    $this->config('drupal_mcp.settings')->set('families.configuration_mutation', TRUE)->save();
     $user = User::create(['name' => 'reader', 'status' => 1]);
     $user->save();
     $this->expectException(MutationException::class);
@@ -121,7 +121,7 @@ final class ConfigurationMutationKernelTest extends KernelTestBase {
    * Tests explicit field target approval.
    */
   public function testFieldTargetDisabled(): void {
-    $this->config('drupal_mcp.settings')->set('mutation_families.configuration', TRUE)->save();
+    $this->config('drupal_mcp.settings')->set('families.configuration_mutation', TRUE)->save();
     $user = User::create(['name' => 'builder', 'roles' => ['builder'], 'status' => 1]);
     $user->save();
     $this->expectException(MutationException::class);

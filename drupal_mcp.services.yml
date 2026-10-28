@@ -3,16 +3,15 @@ services:
     parent: logger.channel_base
     arguments: ['drupal_mcp']
 
-  Drupal\drupal_mcp\Mcp\Limits:
-    class: Drupal\drupal_mcp\Mcp\Limits
+  Drupal\drupal_mcp\Settings:
+    class: Drupal\drupal_mcp\Settings
     arguments:
       - '@config.factory'
-  drupal_mcp.limits: '@Drupal\drupal_mcp\Mcp\Limits'
 
   Drupal\drupal_mcp\Mcp\ToolRegistry:
     class: Drupal\drupal_mcp\Mcp\ToolRegistry
     arguments:
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - !tagged drupal_mcp.tool_provider
       - '@logger.channel.drupal_mcp'
   drupal_mcp.tool_registry: '@Drupal\drupal_mcp\Mcp\ToolRegistry'
@@ -22,7 +21,7 @@ services:
     arguments:
       - '@keyvalue.expirable'
       - '@datetime.time'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
   drupal_mcp.session_store: '@Drupal\drupal_mcp\Mcp\SessionStore'
 
   Drupal\drupal_mcp\Idempotency\IdempotencyManager:
@@ -31,27 +30,21 @@ services:
       - '@keyvalue.expirable'
       - '@lock'
       - '@datetime.time'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@private_key'
   drupal_mcp.idempotency: '@Drupal\drupal_mcp\Idempotency\IdempotencyManager'
 
   Drupal\drupal_mcp\Access\McpAccessPolicy:
     class: Drupal\drupal_mcp\Access\McpAccessPolicy
     arguments:
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@logger.channel.drupal_mcp'
   drupal_mcp.access_policy: '@Drupal\drupal_mcp\Access\McpAccessPolicy'
-
-  Drupal\drupal_mcp\Http\EndpointAllowlist:
-    class: Drupal\drupal_mcp\Http\EndpointAllowlist
-    arguments:
-      - '@config.factory'
-  drupal_mcp.endpoint_allowlist: '@Drupal\drupal_mcp\Http\EndpointAllowlist'
 
   Drupal\drupal_mcp\Http\McpRequestValidator:
     class: Drupal\drupal_mcp\Http\McpRequestValidator
     arguments:
-      - '@drupal_mcp.endpoint_allowlist'
+      - '@Drupal\drupal_mcp\Settings'
   drupal_mcp.request_validator: '@Drupal\drupal_mcp\Http\McpRequestValidator'
 
   Drupal\drupal_mcp\Mcp\SignedCursor:
@@ -69,7 +62,7 @@ services:
     arguments:
       - '@entity_type.manager'
       - '@drupal_mcp.accessible_entity_pager'
-      - '@drupal_mcp.limits'
+      - '@Drupal\drupal_mcp\Settings'
   drupal_mcp.entity_read_tools: '@Drupal\drupal_mcp\Entity\EntityReadTools'
 
   Drupal\drupal_mcp\Mcp\ServerFactory:
@@ -79,14 +72,13 @@ services:
       - '@drupal_mcp.session_store'
       - '@logger.channel.drupal_mcp'
       - '@extension.list.module'
-      - '@drupal_mcp.limits'
+      - '@Drupal\drupal_mcp\Settings'
   drupal_mcp.server_factory: '@Drupal\drupal_mcp\Mcp\ServerFactory'
 
   Drupal\drupal_mcp\Tool\SiteToolProvider:
     class: Drupal\drupal_mcp\Tool\SiteToolProvider
     arguments:
       - '@config.factory'
-      - '@drupal_mcp.access_policy'
       - '@url_generator'
     tags:
       - { name: drupal_mcp.tool_provider }
@@ -103,7 +95,7 @@ services:
   Drupal\drupal_mcp\Tool\ContentToolProvider:
     class: Drupal\drupal_mcp\Tool\ContentToolProvider
     arguments:
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@drupal_mcp.entity_read_tools'
     tags:
       - { name: drupal_mcp.tool_provider }
@@ -112,7 +104,7 @@ services:
     class: Drupal\drupal_mcp\Tool\TaxonomyToolProvider
     arguments:
       - '@entity_type.manager'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@drupal_mcp.entity_read_tools'
     tags:
       - { name: drupal_mcp.tool_provider }
@@ -122,7 +114,7 @@ services:
     arguments:
       - '@entity_type.manager'
       - '@entity_field.manager'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@lock'
       - '@logger.channel.drupal_mcp'
   drupal_mcp.taxonomy_term_mutator: '@Drupal\drupal_mcp\Mutation\TaxonomyTermMutator'
@@ -131,7 +123,7 @@ services:
     class: Drupal\drupal_mcp\Mutation\NodeMutator
     arguments:
       - '@entity_type.manager'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@lock'
       - '@logger.channel.drupal_mcp'
   drupal_mcp.node_mutator: '@Drupal\drupal_mcp\Mutation\NodeMutator'
@@ -147,7 +139,7 @@ services:
     arguments:
       - '@drupal_mcp.taxonomy_term_mutator'
       - '@drupal_mcp.mutation_executor'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
     tags:
       - { name: drupal_mcp.tool_provider }
 
@@ -156,7 +148,7 @@ services:
     arguments:
       - '@drupal_mcp.node_mutator'
       - '@drupal_mcp.mutation_executor'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@entity_field.manager'
     tags:
       - { name: drupal_mcp.tool_provider }
@@ -165,7 +157,7 @@ services:
     class: Drupal\drupal_mcp\Mutation\ConfigurationMutator
     arguments:
       - '@entity_type.manager'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@lock'
       - '@logger.channel.drupal_mcp'
       - '@entity_display.repository'
@@ -217,7 +209,7 @@ services:
   Drupal\drupal_mcp\Diagnostics\DrushRunner:
     class: Drupal\drupal_mcp\Diagnostics\DrushRunner
     arguments:
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
       - '@logger.channel.drupal_mcp'
       - '%app.root%'
       - '@request_stack'
@@ -232,8 +224,7 @@ services:
     class: Drupal\drupal_mcp\Diagnostics\DatabaseInspector
     arguments:
       - '@drupal_mcp.database_connection'
-      - '@config.factory'
-      - '@drupal_mcp.limits'
+      - '@Drupal\drupal_mcp\Settings'
       - '@request_stack'
       - '@logger.channel.drupal_mcp'
       - '@lock'
@@ -251,14 +242,14 @@ services:
     class: Drupal\drupal_mcp\Tool\DrushToolProvider
     arguments:
       - '@drupal_mcp.drush_runner'
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
     tags:
       - { name: drupal_mcp.tool_provider }
 
   Drupal\drupal_mcp\EventSubscriber\ResourceMetadataSubscriber:
     class: Drupal\drupal_mcp\EventSubscriber\ResourceMetadataSubscriber
     arguments:
-      - '@config.factory'
+      - '@Drupal\drupal_mcp\Settings'
     tags:
       - { name: event_subscriber }
 

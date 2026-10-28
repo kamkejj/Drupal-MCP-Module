@@ -7,7 +7,7 @@ namespace Drupal\drupal_mcp\Entity;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\drupal_mcp\Mcp\Limits;
+use Drupal\drupal_mcp\Settings;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
 use Drupal\drupal_mcp\Mcp\ToolFamily;
 use Drupal\drupal_mcp\Mcp\ToolSchema;
@@ -47,7 +47,7 @@ final class EntityReadTools {
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
     private readonly AccessibleEntityPager $pager,
-    private readonly Limits $limits,
+    private readonly Settings $settings,
   ) {}
 
   /**
@@ -291,7 +291,7 @@ final class EntityReadTools {
       $filterGuard($values);
     }
 
-    $pageLimit = $this->limits->clamp(isset($args['limit']) ? (int) $args['limit'] : NULL);
+    $pageLimit = $this->settings->clampPageSize(isset($args['limit']) ? (int) $args['limit'] : NULL);
     $storage = $this->entityTypeManager->getStorage($entityTypeId);
     $context = json_encode([$contextSeed, ...array_values($values)], JSON_THROW_ON_ERROR);
     $page = $this->pager->page(

@@ -6,6 +6,8 @@ namespace Drupal\Tests\drupal_mcp\Unit;
 
 use Drupal\drupal_mcp\Diagnostics\ApprovedDrushCommands;
 use PHPUnit\Framework\TestCase;
+use Drupal\drupal_mcp\Settings;
+use Drupal\Tests\drupal_mcp\Unit\Fixtures\ConfigFactoryStub;
 
 /**
  * Tests the server-defined Drush diagnostic contracts.
@@ -39,7 +41,7 @@ final class ApprovedDrushCommandsTest extends TestCase {
 
     $argv = ($spec->argv)([
       'type' => 'module --root=/unsafe --uri=http://example.test',
-    ], []);
+    ], new Settings(new ConfigFactoryStub([])));
 
     $this->assertNull($argv);
   }
@@ -49,7 +51,9 @@ final class ApprovedDrushCommandsTest extends TestCase {
    */
   public function testConfigGetOnlyBuildsArgvForSiteApprovedName(): void {
     $spec = ApprovedDrushCommands::all()['config:get'];
-    $settings = ['drush_config_names' => ['system.site', 'system.performance']];
+    $settings = new Settings(new ConfigFactoryStub([
+      Settings::NAME => ['drush' => ['config_names' => ['system.site', 'system.performance']]],
+    ]));
 
     $this->assertSame(
       ['system.site', '--format=json'],

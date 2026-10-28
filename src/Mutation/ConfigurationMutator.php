@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Mutation;
 
 use Drupal\Core\Entity\Plugin\DataType\ConfigEntityAdapter;
-
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\EntityDisplayRepositoryInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
@@ -14,6 +12,9 @@ use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\Component\Plugin\PluginManagerInterface;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Psr\Log\LoggerInterface;
+use Drupal\drupal_mcp\Mcp\OperationCapability;
+use Drupal\drupal_mcp\Mcp\ToolFamily;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Owns configuration creation, native authorization, collisions, and recovery.
@@ -24,7 +25,7 @@ final class ConfigurationMutator {
 
   public function __construct(
     private readonly EntityTypeManagerInterface $entities,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly LockBackendInterface $lock,
     private readonly LoggerInterface $logger,
     private readonly EntityDisplayRepositoryInterface $displays,
@@ -38,11 +39,10 @@ final class ConfigurationMutator {
    * Whether at least one approved field target is administrable by this caller.
    */
   public function fieldsAvailable(TokenAuthUser $caller): bool {
-    $config = $this->configFactory->get('drupal_mcp.settings');
-    if (!array_intersect((array) $config->get('configuration_field_types'), array_keys(SupportedFieldTypes::all()))) {
+    if ($this->settings->fieldTypes() === []) {
       return FALSE;
     }
-    foreach ((array) $config->get('configuration_field_targets') as $target) {
+    foreach ($this->settings->fieldTargets() as $target) {
       $type = explode(':', $target, 2)[0];
       if (in_array($type, ['node', 'taxonomy_term'], TRUE) && $caller->hasPermission("administer $type fields") && $caller->hasPermission("administer $type form display") && $caller->hasPermission("administer $type display")) {
         return TRUE;
@@ -55,8 +55,7 @@ final class ConfigurationMutator {
    * Checks current policy before persistence or idempotency replay.
    */
   public function authorize(TokenAuthUser $caller, string $tool, array $arguments): void {
-    $config = $this->configFactory->get('drupal_mcp.settings');
-    if (!$config->get('mutation_families.configuration') || !$caller->hasPermission('access mcp write')) {
+    if (!$this->settings->familyEnabled(ToolFamily::ConfigurationMutation) || !$caller->hasPermission(OperationCapability::Write->permission())) {
       throw new MutationException('access_denied', 'Configuration creation is not permitted.');
     }
     $permission = match ($tool) {
@@ -71,7 +70,7 @@ final class ConfigurationMutator {
     if ($tool === 'drupal_field_create') {
       $target = ($arguments['entity_type'] ?? '') . ':' . ($arguments['bundle'] ?? '');
       $type = $arguments['definition']['type'] ?? '';
-      if (!in_array($target, (array) $config->get('configuration_field_targets'), TRUE) || !in_array($type, (array) $config->get('configuration_field_types'), TRUE)) {
+      if (!in_array($target, $this->settings->fieldTargets(), TRUE) || !in_array($type, $this->settings->fieldTypes(), TRUE)) {
         throw new MutationException('target_disabled', 'This field target or field type is not enabled.');
       }
       if (!$caller->hasPermission('administer ' . $arguments['entity_type'] . ' form display') || !$caller->hasPermission('administer ' . $arguments['entity_type'] . ' display')) {

@@ -5,14 +5,11 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Mcp;
 
 /**
- * The tool families this module can expose, and their settings keys.
+ * The tool families this module can expose.
  *
- * A family is the unit of exposure in drupal_mcp.settings: read families
- * toggle under "families.<id>" while mutation families toggle under
- * "mutation_families.<id>". This enum is the single mapping between the
- * family declared on a tool definition and the settings key the registry
- * reads, so adding a family never requires registry changes and a family
- * name can never drift out of sync with its configuration.
+ * A family is the unit of exposure: each case is toggled by
+ * "families.<value>" in drupal_mcp.settings, read through
+ * \Drupal\drupal_mcp\Settings::familyEnabled().
  */
 enum ToolFamily: string {
 
@@ -27,19 +24,29 @@ enum ToolFamily: string {
   case Users = 'users';
   case Drush = 'drush';
   case Database = 'database';
-  case TaxonomyMutation = 'taxonomy_mutation';
   case NodeMutation = 'node_mutation';
+  case TaxonomyMutation = 'taxonomy_mutation';
   case ConfigurationMutation = 'configuration_mutation';
 
   /**
-   * The drupal_mcp.settings key that enables or disables this family.
+   * A short administrative label.
    */
-  public function settingsKey(): string {
+  public function label(): string {
     return match ($this) {
-      self::TaxonomyMutation => 'mutation_families.taxonomy',
-      self::NodeMutation => 'mutation_families.node',
-      self::ConfigurationMutation => 'mutation_families.configuration',
-      default => 'families.' . $this->value,
+      self::Site => 'Site and caller identity',
+      self::EntitySchema => 'Entity type and schema discovery',
+      self::Content => 'Content reads',
+      self::Taxonomy => 'Taxonomy reads',
+      self::Blocks => 'Reusable block content',
+      self::Menus => 'Menus',
+      self::Aliases => 'Path aliases',
+      self::Files => 'File metadata',
+      self::Users => 'User inspection',
+      self::Drush => 'Drush diagnostics (privileged)',
+      self::Database => 'Database inspection (privileged)',
+      self::NodeMutation => 'Content create and update',
+      self::TaxonomyMutation => 'Taxonomy term create and update',
+      self::ConfigurationMutation => 'Configuration creation (content types, vocabularies, fields)',
     };
   }
 

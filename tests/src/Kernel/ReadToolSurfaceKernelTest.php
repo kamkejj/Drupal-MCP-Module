@@ -199,8 +199,8 @@ final class ReadToolSurfaceKernelTest extends KernelTestBase {
       'file:' . $deniedFile->id(),
     ]);
     $this->container->get('config.factory')->getEditable('drupal_mcp.settings')
-      ->set('node_bundles', ['mcp_test'])
-      ->set('vocabularies', ['tags'])
+      ->set('content.bundles', ['mcp_test'])
+      ->set('taxonomy.vocabularies', ['tags'])
       ->save();
   }
 

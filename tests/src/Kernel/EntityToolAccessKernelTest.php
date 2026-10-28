@@ -151,7 +151,7 @@ final class EntityToolAccessKernelTest extends KernelTestBase {
     ]);
     $this->resetEntityAccessCaches();
     $this->container->get('config.factory')->getEditable('drupal_mcp.settings')
-      ->set('node_bundles', ['mcp_test'])
+      ->set('content.bundles', ['mcp_test'])
       ->save();
   }
 

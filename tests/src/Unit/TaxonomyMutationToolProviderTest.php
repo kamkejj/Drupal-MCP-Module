@@ -12,6 +12,7 @@ use Drupal\drupal_mcp\Tool\TaxonomyMutationToolProvider;
 use Drupal\Tests\drupal_mcp\Unit\Fixtures\ConfigFactoryStub;
 use Drupal\Tests\drupal_mcp\Unit\Fixtures\StubIdempotencyManager;
 use PHPUnit\Framework\TestCase;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Tests destructive taxonomy tool catalogue policy.
@@ -78,11 +79,11 @@ final class TaxonomyMutationToolProviderTest extends TestCase {
       new MutationExecutor(
         StubIdempotencyManager::create($entries, $now),
       ),
-      new ConfigFactoryStub([
-        'drupal_mcp.settings' => [
-          'destructive_mutations' => ['taxonomy_terms' => $destructive],
+      new Settings(new ConfigFactoryStub([
+        Settings::NAME => [
+          'taxonomy' => ['allow_term_delete' => $destructive],
         ],
-      ]),
+      ])),
     );
   }
 

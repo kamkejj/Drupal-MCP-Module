@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Mutation;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\ContentEntityTypeInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
@@ -14,6 +13,8 @@ use Drupal\Core\Session\AccountInterface;
 use Drupal\filter\FilterFormatInterface;
 use Drupal\taxonomy\TermInterface;
 use Psr\Log\LoggerInterface;
+use Drupal\drupal_mcp\Mcp\ToolFamily;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Owns the complete policy and persistence boundary for taxonomy mutations.
@@ -25,7 +26,7 @@ final class TaxonomyTermMutator implements EntityMutatorInterface {
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
     private readonly EntityFieldManagerInterface $entityFieldManager,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly LockBackendInterface $lock,
     private readonly LoggerInterface $logger,
   ) {}
@@ -144,8 +145,7 @@ final class TaxonomyTermMutator implements EntityMutatorInterface {
     }
 
     try {
-      $settings = $this->configFactory->get('drupal_mcp.settings');
-      if (!(bool) $settings->get('destructive_mutations.taxonomy_terms')) {
+      if (!$this->settings->termDeleteEnabled()) {
         throw $this->failure('destructive_disabled', 'Taxonomy term deletion is disabled.');
       }
       $storage = $this->entityTypeManager->getStorage('taxonomy_term');
@@ -373,12 +373,10 @@ final class TaxonomyTermMutator implements EntityMutatorInterface {
    * Enforces fail-closed mutation and vocabulary configuration.
    */
   private function assertEnabledVocabulary(string $vocabulary): void {
-    $settings = $this->configFactory->get('drupal_mcp.settings');
-    if (!(bool) $settings->get('mutation_families.taxonomy')) {
+    if (!$this->settings->familyEnabled(ToolFamily::TaxonomyMutation)) {
       throw $this->failure('mutation_disabled', 'Taxonomy mutations are disabled.');
     }
-    $allowed = array_values((array) ($settings->get('writable_vocabularies') ?? []));
-    if (!\in_array($vocabulary, $allowed, TRUE)) {
+    if (!\in_array($vocabulary, $this->settings->writableVocabularies(), TRUE)) {
       throw $this->failure('target_not_writable', 'The vocabulary is not writable through MCP.');
     }
   }

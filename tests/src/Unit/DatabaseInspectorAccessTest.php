@@ -7,7 +7,6 @@ namespace Drupal\Tests\drupal_mcp\Unit;
 use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\drupal_mcp\Diagnostics\DatabaseInspector;
 use Drupal\drupal_mcp\Diagnostics\ReadOnlyDatabaseConnection;
-use Drupal\drupal_mcp\Mcp\Limits;
 use Drupal\drupal_mcp\Mcp\SignedCursor;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Drupal\Tests\drupal_mcp\Unit\Fixtures\ConfigFactoryStub;
@@ -15,6 +14,7 @@ use Mcp\Exception\ToolCallException;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Tests native permission enforcement for database surfaces.
@@ -50,13 +50,10 @@ final class DatabaseInspectorAccessTest extends TestCase {
   private function inspector(string ...$permissions): DatabaseInspector {
     return new DatabaseInspector(
       new ReadOnlyDatabaseConnection(),
-      new ConfigFactoryStub([
-        'drupal_mcp.settings' => [
-          'database_surfaces' => ['users_public', 'taxonomy_public'],
+      new Settings(new ConfigFactoryStub([
+        Settings::NAME => [
+          'database' => ['surfaces' => ['users_public', 'taxonomy_public']],
         ],
-      ]),
-      new Limits(new ConfigFactoryStub([
-        'drupal_mcp.settings' => [],
       ])),
       new RequestStack(),
       new NullLogger(),

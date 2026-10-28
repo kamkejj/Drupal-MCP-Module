@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Tool;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
 use Drupal\drupal_mcp\Mcp\ToolFamily;
@@ -14,6 +13,7 @@ use Drupal\drupal_mcp\Mutation\EntityMutatorInterface;
 use Drupal\drupal_mcp\Mutation\MutationExecutor;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Mcp\Schema\ToolAnnotations;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Defines the narrow MCP adapter for taxonomy term mutations.
@@ -23,7 +23,7 @@ final class TaxonomyMutationToolProvider implements ToolProviderInterface {
   public function __construct(
     private readonly EntityMutatorInterface $mutator,
     private readonly MutationExecutor $executor,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
   ) {}
 
   /**
@@ -37,9 +37,7 @@ final class TaxonomyMutationToolProvider implements ToolProviderInterface {
       'weight' => ['type' => 'integer', 'minimum' => -1000, 'maximum' => 1000],
     ];
     $key = ToolSchema::idempotencyKey();
-    $writableVocabularies = array_values((array) (
-      $this->configFactory->get('drupal_mcp.settings')->get('writable_vocabularies') ?? []
-    ));
+    $writableVocabularies = $this->settings->writableVocabularies();
 
     $tools = [
       new ToolDefinition(
@@ -85,7 +83,7 @@ final class TaxonomyMutationToolProvider implements ToolProviderInterface {
     // The destructive definition itself is omitted, rather than merely denied
     // by its handler, so list and direct lookup share the same fail-closed
     // catalogue boundary.
-    if ((bool) $this->configFactory->get('drupal_mcp.settings')->get('destructive_mutations.taxonomy_terms')) {
+    if ($this->settings->termDeleteEnabled()) {
       $tools[] = new ToolDefinition(
         name: 'drupal_term_delete',
         title: 'Delete taxonomy term',

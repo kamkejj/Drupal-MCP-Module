@@ -10,9 +10,9 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Flood\FloodInterface;
 use Drupal\Core\Session\AccountProxyInterface;
 use Drupal\drupal_mcp\Access\McpAccessPolicy;
-use Drupal\drupal_mcp\Http\EndpointAllowlist;
 use Drupal\drupal_mcp\Http\McpRequestValidator;
 use Drupal\drupal_mcp\Mcp\ServerFactory;
+use Drupal\drupal_mcp\Settings;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Mcp\Server\Transport\Http\Middleware\CorsMiddleware;
 use Mcp\Server\Transport\Http\Middleware\DnsRebindingProtectionMiddleware;
@@ -39,7 +39,7 @@ final class McpController extends ControllerBase {
     private readonly McpAccessPolicy $accessPolicy,
     private readonly ServerFactory $serverFactory,
     private readonly McpRequestValidator $requestValidator,
-    private readonly EndpointAllowlist $endpointAllowlist,
+    private readonly Settings $settings,
     private readonly HttpMessageFactoryInterface $httpMessageFactory,
     private readonly HttpFoundationFactoryInterface $httpFoundationFactory,
     private readonly FloodInterface $flood,
@@ -55,7 +55,7 @@ final class McpController extends ControllerBase {
       $container->get('drupal_mcp.access_policy'),
       $container->get('drupal_mcp.server_factory'),
       $container->get('drupal_mcp.request_validator'),
-      $container->get('drupal_mcp.endpoint_allowlist'),
+      $container->get(Settings::class),
       $container->get('psr7.http_message_factory'),
       $container->get('psr7.http_foundation_factory'),
       $container->get('flood'),
@@ -84,12 +84,11 @@ final class McpController extends ControllerBase {
     }
     \assert($account instanceof TokenAuthUser);
 
-    $settings = $this->config('drupal_mcp.settings');
     $consumerId = (string) $account->getConsumer()->uuid();
     $floodKey = 'drupal_mcp.request';
     $identifier = $account->id() . ':' . $consumerId;
-    $limit = max(1, (int) $settings->get('flood_limit'));
-    $window = max(60, (int) $settings->get('flood_window'));
+    $limit = $this->settings->floodLimit();
+    $window = $this->settings->floodWindow();
     if (!$this->flood->isAllowed($floodKey, $limit, $window, $identifier)) {
       return $this->privateResponse(new JsonResponse(
         ['error' => 'too_many_requests', 'error_description' => 'MCP request rate limit exceeded.'],
@@ -127,9 +126,6 @@ final class McpController extends ControllerBase {
    * Bridges the request through the MCP SDK and back to a Drupal response.
    */
   private function dispatch(Request $request): Response {
-    $settings = $this->config('drupal_mcp.settings');
-    $maxBody = max(1024, (int) $settings->get('max_body_bytes'));
-
     $psr7Request = $this->httpMessageFactory->createRequest($request);
     $server = $this->serverFactory->forAccount($this->accountProxy->getAccount());
 
@@ -137,10 +133,10 @@ final class McpController extends ControllerBase {
       $psr7Request,
       logger: $this->logger,
       middleware: [
-        new CorsMiddleware($this->endpointAllowlist->origins()),
-        new DnsRebindingProtectionMiddleware($this->endpointAllowlist->hosts()),
+        new CorsMiddleware($this->settings->allowedOrigins()),
+        new DnsRebindingProtectionMiddleware($this->settings->allowedHosts()),
       ],
-      maxBodyBytes: $maxBody,
+      maxBodyBytes: $this->settings->maxBodyBytes(),
     );
 
     $psr7Response = $server->run($transport);

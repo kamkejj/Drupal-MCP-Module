@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Diagnostics;
 
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Lock\LockBackendInterface;
+use Drupal\drupal_mcp\Settings;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
@@ -52,7 +52,7 @@ final class DrushRunner {
   private const FIXED_PREFIX = ['--yes', '--no-ansi', '--no-interaction'];
 
   public function __construct(
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly LoggerInterface $logger,
     private readonly string $appRoot,
     private readonly RequestStack $requestStack,
@@ -86,8 +86,7 @@ final class DrushRunner {
     }
 
     try {
-      $settings = $this->configFactory->get('drupal_mcp.settings')->getRawData();
-      $tail = ($spec->argv)($arguments, $settings);
+      $tail = ($spec->argv)($arguments, $this->settings);
       if ($tail === NULL) {
         return $this->failure($audit, $started, 'contract_refused', NULL, FALSE, 'The request is outside the approved contract for this command.');
       }
@@ -126,7 +125,7 @@ final class DrushRunner {
         return $this->failure($audit, $started, 'invalid_output', $exitCode, FALSE, 'The diagnostic output could not be parsed.');
       }
 
-      $projected = ($spec->project)($decoded, $arguments, $settings);
+      $projected = ($spec->project)($decoded, $arguments);
       $this->logger->notice('MCP privileged diagnostic completed.', $audit + [
         'outcome' => 'success',
         'failure_category' => NULL,

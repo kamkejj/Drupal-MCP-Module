@@ -17,8 +17,8 @@ final class NodeMutationSurfaceTest extends TestCase {
    */
   public function testShippedDefaultsAreFailClosed(): void {
     $settings = Yaml::parseFile(__DIR__ . '/../../../config/install/drupal_mcp.settings.yml');
-    $this->assertFalse($settings['mutation_families']['node']);
-    $this->assertSame([], $settings['writable_node_bundles']);
+    $this->assertFalse($settings['families']['node_mutation']);
+    $this->assertSame([], $settings['content']['writable_bundles']);
   }
 
   /**
@@ -28,9 +28,9 @@ final class NodeMutationSurfaceTest extends TestCase {
     $schema = Yaml::parseFile(__DIR__ . '/../../../config/schema/drupal_mcp.schema.yml');
     $mapping = $schema['drupal_mcp.settings']['mapping'];
 
-    $this->assertSame('boolean', $mapping['mutation_families']['mapping']['node']['type']);
-    $this->assertSame('sequence', $mapping['writable_node_bundles']['type']);
-    $this->assertSame('string', $mapping['writable_node_bundles']['sequence']['type']);
+    $this->assertSame('boolean', $mapping['families']['mapping']['node_mutation']['type']);
+    $this->assertSame('sequence', $mapping['content']['mapping']['writable_bundles']['type']);
+    $this->assertSame('string', $mapping['content']['mapping']['writable_bundles']['sequence']['type']);
   }
 
 }

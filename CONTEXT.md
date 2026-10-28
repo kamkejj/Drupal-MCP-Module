@@ -17,9 +17,12 @@ for finding and discussing seams.
   caller is an explicit parameter end to end; only the controller and the
   core-adapter boundary touch the account proxy.
 - **Tool family** — the unit of exposure: a named group of tools toggled by
-  one `drupal_mcp.settings` key. `Mcp\ToolFamily` is the single mapping
-  between a family and its settings key (read families under
-  `families.<id>`, mutation families under `mutation_families.<id>`).
+  `families.<id>` in `drupal_mcp.settings`, where `<id>` is the
+  `Mcp\ToolFamily` case value (read and mutation families alike).
+- **Settings** — `Settings`, the one typed reader of `drupal_mcp.settings`.
+  It owns every default, clamp, and fail-closed fallback (families off,
+  allowlists empty, resource binding required, writable lists limited to
+  readable ones). Nothing else reads the module's configuration keys.
 - **Tool provider** — a tagged service (`drupal_mcp.tool_provider`) that
   contributes tool definitions for one area (content, taxonomy, users,
   diagnostics…). Providers are adapters: schema declaration in front,
@@ -28,13 +31,15 @@ for finding and discussing seams.
   per request: family enablement, scope + permission capability, extra
   permissions. The SDK only ever receives tools that survived this filter.
 - **Operation capability** — read or write. `Mcp\OperationCapability` owns
-  the capability's scope key, default scope, resolved scope, and permission.
+  the capability's fixed OAuth scope (`mcp:read` / `mcp:write`), its Drupal
+  permission, and the check that a token caller holds both.
 - **Signed cursor** — an opaque, HMAC-signed continuation token carrying one
   offset bound to one query context (`Mcp\SignedCursor`). Every paginating
   tool shares this single implementation.
 - **Page limit** — the configured pagination maximum and the clamping of
-  requested page sizes (`Mcp\Limits`). Every paging surface resolves through
-  it, including the SDK server's advertised pagination limit.
+  requested page sizes (`Settings::pageSize()` / `clampPageSize()`). Every
+  paging surface resolves through it, including the SDK server's advertised
+  pagination limit.
 
 ## Configuration creation
 
@@ -96,6 +101,7 @@ See [configuration creation](docs/configuration-creation.md) and its
   `/mcp` request passes: token authentication, capability scope + permission
   pairs, RFC 8707 resource audience.
 - **Endpoint allowlist** — the endpoint's Host and Origin policy
-  (`Http\EndpointAllowlist`), parsed once for both the request validator
-  and the SDK transport middlewares so the gate and CORS/DNS-rebinding
-  enforcement can never disagree.
+  (`Settings::allowedHosts()` / `allowedOrigins()`; the resource URI host is
+  always allowed), consumed by both the request validator and the SDK
+  transport middlewares so the gate and CORS/DNS-rebinding enforcement can
+  never disagree.

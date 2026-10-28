@@ -6,7 +6,6 @@ namespace Drupal\drupal_mcp\Tool;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Routing\UrlGeneratorInterface;
-use Drupal\drupal_mcp\Access\McpAccessPolicy;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
 use Drupal\drupal_mcp\Mcp\ToolFamily;
@@ -22,7 +21,6 @@ final class SiteToolProvider implements ToolProviderInterface {
 
   public function __construct(
     private readonly ConfigFactoryInterface $configFactory,
-    private readonly McpAccessPolicy $accessPolicy,
     private readonly UrlGeneratorInterface $urlGenerator,
   ) {}
 
@@ -68,9 +66,9 @@ final class SiteToolProvider implements ToolProviderInterface {
       'default_langcode' => $this->configFactory->get('system.site')->get('langcode') ?: 'en',
       'install_profile' => $this->configFactory->get('core.extension')->get('profile') ?? NULL,
       'mcp' => [
-        'read_only' => TRUE,
         'endpoint' => 'mcp',
-        'required_scope' => OperationCapability::Read->resolveScope($this->configFactory),
+        'read_scope' => OperationCapability::Read->scope(),
+        'write_scope' => OperationCapability::Write->scope(),
       ],
     ];
   }
@@ -87,13 +85,14 @@ final class SiteToolProvider implements ToolProviderInterface {
       'uid' => (int) $caller->id(),
       'name' => $caller->getDisplayName(),
       'roles' => array_values($caller->getRoles()),
-      'granted_scopes' => $this->accessPolicy->grantedScopes($caller),
+      'granted_scopes' => OperationCapability::grantedScopes($caller),
       'client' => [
         'id' => $consumer->getClientId(),
         'label' => $consumer->label(),
       ],
       'mcp_capabilities' => [
-        'read' => TRUE,
+        'read' => OperationCapability::Read->isGrantedTo($caller),
+        'write' => OperationCapability::Write->isGrantedTo($caller),
         'diagnostics' => $caller->hasPermission('administer site configuration'),
       ],
     ];

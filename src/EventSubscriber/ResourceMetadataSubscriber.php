@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\EventSubscriber;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\drupal_mcp\Mcp\OperationCapability;
+use Drupal\drupal_mcp\Settings;
 use Drupal\simple_oauth_server_metadata\Event\ResourceMetadataEvent;
 use Drupal\simple_oauth_server_metadata\Event\ResourceMetadataEvents;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -22,7 +22,7 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 final class ResourceMetadataSubscriber implements EventSubscriberInterface {
 
   public function __construct(
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
   ) {}
 
   /**
@@ -40,13 +40,13 @@ final class ResourceMetadataSubscriber implements EventSubscriberInterface {
   public function onBuild(ResourceMetadataEvent $event): void {
     $metadata = &$event->metadata;
 
-    $metadata['resource'] = (string) $this->configFactory->get('drupal_mcp.settings')->get('resource_uri');
+    $metadata['resource'] = $this->settings->resourceUri();
     $metadata['bearer_methods_supported'] = ['header'];
 
-    $metadata['scopes_supported'] = array_values(array_unique([
-      OperationCapability::Read->resolveScope($this->configFactory),
-      OperationCapability::Write->resolveScope($this->configFactory),
-    ]));
+    $metadata['scopes_supported'] = array_map(
+      static fn (OperationCapability $capability): string => $capability->scope(),
+      OperationCapability::cases(),
+    );
   }
 
 }

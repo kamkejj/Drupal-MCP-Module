@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Drupal\drupal_mcp\Idempotency;
 
 use Drupal\Component\Datetime\TimeInterface;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\KeyValueStore\KeyValueExpirableFactoryInterface;
 use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\Core\PrivateKey;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * Executes mutations once and persists bounded replay results.
@@ -19,15 +19,13 @@ use Drupal\Core\PrivateKey;
 final class IdempotencyManager {
 
   private const COLLECTION = 'drupal_mcp_idempotency';
-  private const DEFAULT_TTL = 86400;
-  private const MINIMUM_TTL = 60;
   private const MAXIMUM_RESULT_BYTES = 65536;
 
   public function __construct(
     private readonly KeyValueExpirableFactoryInterface $keyValueExpirable,
     private readonly LockBackendInterface $lock,
     private readonly TimeInterface $time,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
     private readonly PrivateKey $privateKey,
   ) {}
 
@@ -45,8 +43,7 @@ final class IdempotencyManager {
     $identity = $this->identityDigest($uid, $clientId, $toolName, $callerKey);
     $payloadDigest = $this->payloadDigest($payload);
     $lockName = self::COLLECTION . ':' . $identity;
-    $configuredTtl = $this->configFactory->get('drupal_mcp.settings')->get('idempotency_ttl');
-    $ttl = max(self::MINIMUM_TTL, (int) ($configuredTtl ?? self::DEFAULT_TTL));
+    $ttl = $this->settings->idempotencyTtl();
 
     if (!$this->lock->acquire($lockName, $ttl)) {
       throw new IdempotencyInProgressException();

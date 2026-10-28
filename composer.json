@@ -11,7 +11,7 @@
     ],
     "require": {
         "php": ">=8.3",
-        "drupal/core": "^11.4",
+        "drupal/core": "^11",
         "drupal/simple_oauth": "^6.1",
         "e0ipso/simple_oauth_21": "^1.13",
         "mcp/sdk": "^0.8.1"

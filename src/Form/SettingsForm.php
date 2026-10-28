@@ -4,20 +4,47 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Form;
 
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Config\TypedConfigManagerInterface;
+use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\drupal_mcp\Diagnostics\ApprovedConfigProjections;
 use Drupal\drupal_mcp\Diagnostics\ApprovedDatabaseSurfaces;
-use Drupal\drupal_mcp\Mcp\OperationCapability;
+use Drupal\drupal_mcp\Diagnostics\ApprovedDrushCommands;
+use Drupal\drupal_mcp\Mcp\ToolFamily;
 use Drupal\drupal_mcp\Mutation\SupportedFieldTypes;
+use Drupal\drupal_mcp\Settings;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Settings for the Drupal MCP endpoint.
  *
- * Database credentials, key paths, and executable paths are deliberately not
- * configurable here: they are deployment-controlled and never tool-editable.
+ * Form groups mirror the drupal_mcp.settings structure one to one, so
+ * submission is a direct mapping. Database credentials, key paths, and
+ * executable paths are deliberately not configurable here: they are
+ * deployment-controlled and never tool-editable.
  */
 final class SettingsForm extends ConfigFormBase {
+
+  public function __construct(
+    ConfigFactoryInterface $config_factory,
+    TypedConfigManagerInterface $typed_config_manager,
+    private readonly EntityTypeBundleInfoInterface $bundleInfo,
+  ) {
+    parent::__construct($config_factory, $typed_config_manager);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container): static {
+    return new static(
+      $container->get('config.factory'),
+      $container->get('config.typed'),
+      $container->get('entity_type.bundle.info'),
+    );
+  }
 
   /**
    * {@inheritdoc}
@@ -30,264 +57,143 @@ final class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   protected function getEditableConfigNames(): array {
-    return ['drupal_mcp.settings'];
+    return [Settings::NAME];
   }
 
   /**
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state): array {
-    $config = $this->config('drupal_mcp.settings');
+    $config = $this->config(Settings::NAME);
 
-    $form['auth'] = [
+    $form['endpoint'] = [
       '#type' => 'details',
-      '#title' => $this->t('Authentication and transport'),
+      '#title' => $this->t('Endpoint and OAuth'),
+      '#description' => $this->t('Clients need the OAuth scope <code>mcp:read</code> and/or <code>mcp:write</code> plus the matching "access mcp read/write" permission.'),
       '#open' => TRUE,
-      '#tree' => TRUE,
     ];
-    $form['auth']['read_scope'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Required read scope'),
-      '#description' => $this->t('The OAuth scope required by MCP read operations. It must exist as a Simple OAuth scope and be grantable to connecting clients.'),
-      '#default_value' => OperationCapability::Read->resolveScope($this->configFactory),
-      '#required' => TRUE,
-    ];
-    $form['auth']['write_scope'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Required write scope'),
-      '#description' => $this->t('The OAuth scope required by MCP write operations. It must exist as a Simple OAuth scope and be grantable to connecting clients.'),
-      '#default_value' => OperationCapability::Write->resolveScope($this->configFactory),
-      '#required' => TRUE,
-    ];
-    $form['auth']['resource_binding'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Resource audience binding policy'),
-      '#description' => $this->t('"Require" rejects tokens that are not bound to this canonical /mcp resource. "Audit" is a development fallback that accepts unbound tokens and records an audit entry. Tokens carrying a resource claim for another resource are always rejected.'),
-      '#options' => [
-        'audit' => $this->t('Audit (development fallback)'),
-        'require' => $this->t('Require binding (compliant)'),
-      ],
-      '#default_value' => $config->get('resource_binding') ?: 'require',
-      '#required' => TRUE,
-    ];
-    $form['auth']['resource_uri'] = [
+    $form['endpoint']['resource_uri'] = [
       '#type' => 'url',
       '#title' => $this->t('Canonical MCP resource URI'),
-      '#description' => $this->t('The single absolute HTTPS URI used for OAuth resource binding. It must end with /mcp and must not contain credentials, a query, or a fragment.'),
+      '#description' => $this->t('The absolute HTTPS URI used for OAuth resource binding, ending with /mcp. Its host is always allowed.'),
       '#default_value' => $config->get('resource_uri'),
       '#required' => TRUE,
     ];
-    $form['auth']['allowed_hosts'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Allowed hosts'),
-      '#description' => $this->t('One host per line that may reach the MCP endpoint (Host header validation, DNS-rebinding protection). Leave empty to use the request host after Drupal trusted-host validation.'),
-      '#default_value' => implode("\n", $config->get('allowed_hosts') ?? []),
+    $form['endpoint']['resource_binding'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Resource binding'),
+      '#description' => $this->t('"Require" rejects tokens not bound to the resource URI. "Audit" accepts unbound tokens with a log entry (development only). Tokens bound to another resource are always rejected.'),
+      '#options' => [
+        'require' => $this->t('Require (compliant)'),
+        'audit' => $this->t('Audit (development fallback)'),
+      ],
+      '#default_value' => $config->get('resource_binding') === 'audit' ? 'audit' : 'require',
     ];
-    $form['auth']['allowed_origins'] = [
+    $form['endpoint']['allowed_hosts'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Additional allowed hosts'),
+      '#description' => $this->t('One per line, for hosts other than the resource URI host.'),
+      '#default_value' => implode("\n", (array) $config->get('allowed_hosts')),
+      '#rows' => 2,
+    ];
+    $form['endpoint']['allowed_origins'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Allowed CORS origins'),
-      '#description' => $this->t('One absolute origin per line for browser-based MCP clients (for example https://clerk.example). Leave empty to disallow cross-origin browser access; non-browser clients are unaffected.'),
-      '#default_value' => implode("\n", $config->get('allowed_origins') ?? []),
+      '#description' => $this->t('One absolute origin per line for browser-based clients. Leave empty to disallow cross-origin browser access.'),
+      '#default_value' => implode("\n", (array) $config->get('allowed_origins')),
+      '#rows' => 2,
     ];
 
     $form['limits'] = [
       '#type' => 'details',
       '#title' => $this->t('Limits'),
-      '#open' => TRUE,
       '#tree' => TRUE,
     ];
-    $form['limits']['max_body_bytes'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Maximum request body size (bytes)'),
-      '#min' => 1024,
-      '#default_value' => $config->get('max_body_bytes'),
-      '#required' => TRUE,
-    ];
-    $form['limits']['session_ttl'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Session time-to-live (seconds)'),
-      '#description' => $this->t('Handshake-era MCP sessions are stored in the database and expire after this period of inactivity.'),
-      '#min' => 60,
-      '#default_value' => $config->get('session_ttl'),
-      '#required' => TRUE,
-    ];
-    $form['limits']['pagination_limit'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Maximum page size for list tools'),
-      '#min' => 1,
-      '#max' => 100,
-      '#default_value' => $config->get('pagination_limit'),
-      '#required' => TRUE,
-    ];
-    $form['limits']['flood_limit'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Requests per window, per user and client'),
-      '#min' => 1,
-      '#default_value' => $config->get('flood_limit'),
-      '#required' => TRUE,
-    ];
-    $form['limits']['flood_window'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Rate limit window (seconds)'),
-      '#min' => 60,
-      '#default_value' => $config->get('flood_window'),
-      '#required' => TRUE,
-    ];
+    foreach ($this->limitFields() as $key => [$title, $min]) {
+      $form['limits'][$key] = [
+        '#type' => 'number',
+        '#title' => $title,
+        '#min' => $min,
+        '#default_value' => $config->get("limits.$key"),
+        '#required' => TRUE,
+      ];
+    }
 
+    $families = [];
+    foreach (ToolFamily::cases() as $family) {
+      $families[$family->value] = $family->label();
+    }
     $form['families'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Tool families'),
-      '#description' => $this->t('Disabled families hide their tools and make direct calls fail. Diagnostic families additionally require the "administer site configuration" permission.'),
-      '#open' => TRUE,
-      '#tree' => TRUE,
-    ];
-    $familyLabels = [
-      'site' => $this->t('Site and caller identity'),
-      'entity_schema' => $this->t('Entity type and schema discovery'),
-      'content' => $this->t('Content reads'),
-      'taxonomy' => $this->t('Taxonomy inspection'),
-      'blocks' => $this->t('Reusable block content'),
-      'menus' => $this->t('Menus and aliases'),
-      'aliases' => $this->t('Path aliases'),
-      'files' => $this->t('File metadata'),
-      'users' => $this->t('User inspection'),
-      'drush' => $this->t('Drush diagnostics (privileged)'),
-      'database' => $this->t('Database inspection (privileged)'),
-    ];
-    foreach ($familyLabels as $key => $label) {
-      $form['families'][$key] = [
-        '#type' => 'checkbox',
-        '#title' => $label,
-        '#default_value' => (bool) ($config->get('families')[$key] ?? FALSE),
-      ];
-    }
-    $form['families']['node_bundles'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Enabled node bundles (machine names, one per line)'),
-      '#description' => $this->t('Content read tools only expose explicitly listed node types. An empty list is valid and means no content is exposed. New or renamed types are not exposed until added here.'),
-      '#default_value' => implode("\n", $config->get('node_bundles') ?? []),
-    ];
-    $form['families']['vocabularies'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Enabled vocabularies (machine names, one per line)'),
-      '#description' => $this->t('Taxonomy term reads only expose explicitly listed vocabularies. An empty list is valid.'),
-      '#default_value' => implode("\n", $config->get('vocabularies') ?? []),
-    ];
-    $form['mutations'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Mutations (restricted)'),
-      '#description' => $this->t('Mutations are disabled by default and always require OAuth write scope, MCP write permission, native entity access, and field access.'),
-      '#open' => FALSE,
-      '#tree' => TRUE,
-    ];
-    $form['mutations']['configuration'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable configuration creation (content types, vocabularies, fields)'),
-      '#description' => $this->t('Requires native configuration administration permissions. Does not automatically expose new content or terms.'),
-      '#default_value' => (bool) $config->get('mutation_families.configuration'),
-    ];
-    $form['mutations']['configuration_field_targets'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Approved field targets (node:bundle or taxonomy_term:vocabulary, one per line)'),
-      '#default_value' => implode("\n", $config->get('configuration_field_targets') ?? []),
-    ];
-    $types = array_keys(SupportedFieldTypes::all());
-    $form['mutations']['configuration_field_types'] = [
       '#type' => 'checkboxes',
-      '#title' => $this->t('Approved field types'),
-      '#options' => array_combine($types, $types),
-      '#default_value' => $config->get('configuration_field_types') ?? [],
-    ];
-    $form['mutations']['taxonomy'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable taxonomy term mutations'),
-      '#default_value' => (bool) $config->get('mutation_families.taxonomy'),
-    ];
-    $enabledVocabularies = (array) ($config->get('vocabularies') ?? []);
-    $form['mutations']['writable_vocabularies'] = [
-      '#type' => 'checkboxes',
-      '#title' => $this->t('Writable vocabularies'),
-      '#description' => $this->t('Only vocabularies enabled for reads can be selected. Selection does not bypass native access checks.'),
-      '#options' => array_combine($enabledVocabularies, $enabledVocabularies) ?: [],
-      '#default_value' => array_values(array_intersect(
-        (array) ($config->get('writable_vocabularies') ?? []),
-        $enabledVocabularies,
-      )),
-    ];
-    $form['mutations']['node'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable content (node) mutations'),
-      '#default_value' => (bool) $config->get('mutation_families.node'),
-    ];
-    $enabledBundles = (array) ($config->get('node_bundles') ?? []);
-    $form['mutations']['writable_node_bundles'] = [
-      '#type' => 'checkboxes',
-      '#title' => $this->t('Writable node bundles'),
-      '#description' => $this->t('Only node bundles enabled for reads can be selected. Selection does not bypass native access checks.'),
-      '#options' => array_combine($enabledBundles, $enabledBundles) ?: [],
-      '#default_value' => array_values(array_intersect(
-        (array) ($config->get('writable_node_bundles') ?? []),
-        $enabledBundles,
-      )),
-    ];
-    $form['mutations']['destructive_taxonomy_terms'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable destructive taxonomy term deletion'),
-      '#description' => $this->t('Warning: permanently deletes eligible, unreferenced terms. This is separately disabled by default and still requires all write and native delete checks.'),
-      '#default_value' => (bool) $config->get('destructive_mutations.taxonomy_terms'),
-    ];
-    $form['mutations']['idempotency_ttl'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Idempotency retention (seconds)'),
-      '#min' => 60,
-      '#max' => 604800,
-      '#default_value' => $config->get('idempotency_ttl') ?: 86400,
-      '#required' => TRUE,
+      '#title' => $this->t('Enabled tool families'),
+      '#description' => $this->t('Mutations additionally require the write scope, "access mcp write", and native entity access. Privileged diagnostics require "administer site configuration".'),
+      '#options' => $families,
+      '#default_value' => array_keys(array_filter((array) $config->get('families'))),
     ];
 
-    $form['diagnostics'] = [
+    $nodeTypes = $this->bundleOptions('node');
+    $form['content'] = [
       '#type' => 'details',
-      '#title' => $this->t('Privileged diagnostics'),
-      '#description' => $this->t('Drush diagnostics fail closed: no command runs until its ID is approved here, and callers with "administer site configuration" only. The command set, arguments, output projection, and runtime bounds are fixed by the module; this list only switches them on.'),
-      '#open' => TRUE,
+      '#title' => $this->t('Content'),
       '#tree' => TRUE,
+      '#open' => TRUE,
+      'bundles' => $this->checkboxes($this->t('Readable content types'), $nodeTypes, $config->get('content.bundles')),
+      'writable_bundles' => $this->checkboxes($this->t('Writable content types'), $nodeTypes, $config->get('content.writable_bundles'), $this->t('Must also be readable.')),
     ];
-    $drushOptions = [
-      'status' => $this->t('status (versions, bootstrap, database state; credentials stripped)'),
-      'pm:list' => $this->t('pm:list (installed projects and themes)'),
-      'config:get' => $this->t('config:get (only for the configuration names approved below)'),
-    ];
-    $approvedDrush = (array) ($config->get('drush_commands') ?? []);
-    foreach ($drushOptions as $id => $label) {
-      $form['diagnostics']['drush_commands'][$id] = [
+
+    $vocabularies = $this->bundleOptions('taxonomy_term');
+    $form['taxonomy'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Taxonomy'),
+      '#tree' => TRUE,
+      '#open' => TRUE,
+      'vocabularies' => $this->checkboxes($this->t('Readable vocabularies'), $vocabularies, $config->get('taxonomy.vocabularies')),
+      'writable_vocabularies' => $this->checkboxes($this->t('Writable vocabularies'), $vocabularies, $config->get('taxonomy.writable_vocabularies'), $this->t('Must also be readable.')),
+      'allow_term_delete' => [
         '#type' => 'checkbox',
-        '#title' => $label,
-        '#default_value' => \in_array($id, $approvedDrush, TRUE),
-      ];
-    }
-    $form['diagnostics']['drush_config_names'] = [
-      '#type' => 'checkboxes',
-      '#title' => $this->t('Configuration projections allowed for config:get'),
-      '#description' => $this->t('Only the listed server-defined properties are returned. Configuration objects and properties cannot be added through this form.'),
-      '#options' => ApprovedConfigProjections::options(),
-      '#default_value' => array_values(array_intersect(
-        (array) ($config->get('drush_config_names') ?? []),
-        array_keys(ApprovedConfigProjections::options()),
-      )),
+        '#title' => $this->t('Allow permanent deletion of unreferenced terms in writable vocabularies'),
+        '#default_value' => (bool) $config->get('taxonomy.allow_term_delete'),
+      ],
     ];
-    $approvedSurfaces = (array) ($config->get('database_surfaces') ?? []);
-    $form['diagnostics']['database_surfaces'] = [
-      '#type' => 'checkboxes',
-      '#title' => $this->t('Approved database surfaces'),
-      '#description' => $this->t('Only curated views selected here can be described or queried, and only through the separately configured SELECT-only database principal.'),
-      '#options' => array_map(
-        fn ($surface) => $this->t('@label — @description', [
-          '@label' => $surface->label,
-          '@description' => $surface->description,
-        ]),
-        ApprovedDatabaseSurfaces::all(),
+
+    $fieldTypes = array_keys(SupportedFieldTypes::all());
+    $form['configuration'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Configuration creation'),
+      '#tree' => TRUE,
+      'field_targets' => [
+        '#type' => 'textarea',
+        '#title' => $this->t('Approved field targets'),
+        '#description' => $this->t('One per line: node:bundle or taxonomy_term:vocabulary. Targets may name bundles that do not exist yet.'),
+        '#default_value' => implode("\n", (array) $config->get('configuration.field_targets')),
+        '#rows' => 3,
+      ],
+      'field_types' => $this->checkboxes($this->t('Approved field types'), array_combine($fieldTypes, $fieldTypes), $config->get('configuration.field_types')),
+    ];
+
+    $form['drush'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Drush diagnostics'),
+      '#description' => $this->t('Commands, arguments, output projection, and runtime bounds are fixed by the module; these lists only switch them on.'),
+      '#tree' => TRUE,
+      'commands' => $this->checkboxes(
+        $this->t('Approved commands'),
+        array_map(static fn ($spec): string => $spec->id . ' — ' . $spec->description, ApprovedDrushCommands::all()),
+        $config->get('drush.commands'),
       ),
-      '#default_value' => $approvedSurfaces,
+      'config_names' => $this->checkboxes($this->t('Configuration readable by config:get'), ApprovedConfigProjections::options(), $config->get('drush.config_names')),
+    ];
+
+    $form['database'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Database inspection'),
+      '#description' => $this->t('Surfaces are queried only through the separately configured SELECT-only database principal.'),
+      '#tree' => TRUE,
+      'surfaces' => $this->checkboxes(
+        $this->t('Approved surfaces'),
+        array_map(static fn ($surface): string => $surface->label . ' — ' . $surface->description, ApprovedDatabaseSurfaces::all()),
+        $config->get('database.surfaces'),
+      ),
     ];
 
     return parent::buildForm($form, $form_state);
@@ -296,118 +202,138 @@ final class SettingsForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
-  public function submitForm(array &$form, FormStateInterface $form_state): void {
-    $config = $this->config('drupal_mcp.settings');
+  public function validateForm(array &$form, FormStateInterface $form_state): void {
+    parent::validateForm($form, $form_state);
 
-    $lines = fn (string $value): array => array_values(array_filter(array_map('trim', explode("\n", (string) $value))));
-
-    $families = [];
-    foreach ([
-      'site',
-      'entity_schema',
-      'content',
-      'taxonomy',
-      'blocks',
-      'menus',
-      'aliases',
-      'files',
-      'users',
-      'drush',
-      'database',
-    ] as $key) {
-      $families[$key] = (bool) $form_state->getValue(['families', $key]);
+    $resourceUri = rtrim(trim((string) $form_state->getValue('resource_uri')), '/');
+    $parts = parse_url($resourceUri);
+    if (!\is_array($parts)
+      || ($parts['scheme'] ?? '') !== 'https'
+      || empty($parts['host'])
+      || ($parts['path'] ?? '') !== '/mcp'
+      || array_intersect_key($parts, array_flip(['user', 'pass', 'query', 'fragment'])) !== []) {
+      $form_state->setErrorByName('resource_uri', $this->t('Enter an absolute HTTPS URI ending in /mcp, without credentials, a query, or a fragment.'));
     }
 
-    $config
-      ->set('read_scope', trim((string) $form_state->getValue(['auth', 'read_scope'])))
-      ->set('write_scope', trim((string) $form_state->getValue(['auth', 'write_scope'])))
-      ->set('resource_binding', (string) $form_state->getValue(['auth', 'resource_binding']))
-      ->set('resource_uri', rtrim(trim((string) $form_state->getValue(['auth', 'resource_uri'])), '/'))
-      ->set('allowed_hosts', $lines((string) $form_state->getValue(['auth', 'allowed_hosts'])))
-      ->set('allowed_origins', $lines((string) $form_state->getValue(['auth', 'allowed_origins'])))
-      ->set('max_body_bytes', (int) $form_state->getValue(['limits', 'max_body_bytes']))
-      ->set('session_ttl', (int) $form_state->getValue(['limits', 'session_ttl']))
-      ->set('pagination_limit', (int) $form_state->getValue(['limits', 'pagination_limit']))
-      ->set('flood_limit', (int) $form_state->getValue(['limits', 'flood_limit']))
-      ->set('flood_window', (int) $form_state->getValue(['limits', 'flood_window']))
+    foreach ($this->lines($form_state->getValue(['configuration', 'field_targets'])) as $target) {
+      if (!preg_match('/^(node|taxonomy_term):[a-z][a-z0-9_]{0,31}$/D', $target)) {
+        $form_state->setErrorByName('configuration][field_targets', $this->t('Use node:bundle or taxonomy_term:vocabulary machine names.'));
+      }
+    }
+
+    foreach (['content' => 'bundles', 'taxonomy' => 'vocabularies'] as $group => $readable) {
+      $writableKey = 'writable_' . $readable;
+      $unreadable = array_diff($this->checked([$group, $writableKey], $form_state), $this->checked([$group, $readable], $form_state));
+      if ($unreadable !== []) {
+        $form_state->setErrorByName("$group][$writableKey", $this->t('Writable items must also be readable: @items.', ['@items' => implode(', ', $unreadable)]));
+      }
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function submitForm(array &$form, FormStateInterface $form_state): void {
+    $families = [];
+    foreach (ToolFamily::cases() as $family) {
+      $families[$family->value] = !empty($form_state->getValue(['families', $family->value]));
+    }
+
+    $this->config(Settings::NAME)
+      ->set('resource_uri', rtrim(trim((string) $form_state->getValue('resource_uri')), '/'))
+      ->set('resource_binding', $form_state->getValue('resource_binding') === 'audit' ? 'audit' : 'require')
+      ->set('allowed_hosts', $this->lines($form_state->getValue('allowed_hosts')))
+      ->set('allowed_origins', $this->lines($form_state->getValue('allowed_origins')))
+      ->set('limits', array_map('intval', array_intersect_key((array) $form_state->getValue('limits'), $this->limitFields())))
       ->set('families', $families)
-      ->set('node_bundles', $lines((string) $form_state->getValue(['families', 'node_bundles'])))
-      ->set('vocabularies', $lines((string) $form_state->getValue(['families', 'vocabularies'])))
-      ->set('mutation_families.taxonomy', (bool) $form_state->getValue(['mutations', 'taxonomy']))
-      ->set('mutation_families.node', (bool) $form_state->getValue(['mutations', 'node']))
-      ->set('mutation_families.configuration', (bool) $form_state->getValue(['mutations', 'configuration']))
-      ->set('configuration_field_targets', $lines(
-        (string) $form_state->getValue(['mutations', 'configuration_field_targets'])
-      ))
-      ->set('configuration_field_types', array_values(array_intersect(
-        array_filter((array) $form_state->getValue(['mutations', 'configuration_field_types'])),
-        array_keys(SupportedFieldTypes::all()),
-      )))
-      ->set('writable_vocabularies', array_values(array_filter(
-        (array) $form_state->getValue(['mutations', 'writable_vocabularies'])
-      )))
-      ->set('writable_node_bundles', array_values(array_filter(
-        (array) $form_state->getValue(['mutations', 'writable_node_bundles'])
-      )))
-      ->set(
-        'destructive_mutations.taxonomy_terms',
-        (bool) $form_state->getValue(['mutations', 'destructive_taxonomy_terms'])
-      )
-      ->set('idempotency_ttl', (int) $form_state->getValue(['mutations', 'idempotency_ttl']))
-      ->set('drush_commands', array_values(array_keys(array_filter([
-        'status' => (bool) $form_state->getValue(['diagnostics', 'drush_commands', 'status']),
-        'pm:list' => (bool) $form_state->getValue(['diagnostics', 'drush_commands', 'pm:list']),
-        'config:get' => (bool) $form_state->getValue(['diagnostics', 'drush_commands', 'config:get']),
-      ]))))
-      ->set('drush_config_names', array_values(array_filter(
-        (array) $form_state->getValue(['diagnostics', 'drush_config_names'])
-      )))
-      ->set('database_surfaces', array_values(array_filter(
-        (array) $form_state->getValue(['diagnostics', 'database_surfaces'])
-      )))
+      ->set('content', [
+        'bundles' => $this->checked(['content', 'bundles'], $form_state),
+        'writable_bundles' => $this->checked(['content', 'writable_bundles'], $form_state),
+      ])
+      ->set('taxonomy', [
+        'vocabularies' => $this->checked(['taxonomy', 'vocabularies'], $form_state),
+        'writable_vocabularies' => $this->checked(['taxonomy', 'writable_vocabularies'], $form_state),
+        'allow_term_delete' => (bool) $form_state->getValue(['taxonomy', 'allow_term_delete']),
+      ])
+      ->set('configuration', [
+        'field_targets' => $this->lines($form_state->getValue(['configuration', 'field_targets'])),
+        'field_types' => $this->checked(['configuration', 'field_types'], $form_state),
+      ])
+      ->set('drush', [
+        'commands' => $this->checked(['drush', 'commands'], $form_state),
+        'config_names' => $this->checked(['drush', 'config_names'], $form_state),
+      ])
+      ->set('database', [
+        'surfaces' => $this->checked(['database', 'surfaces'], $form_state),
+      ])
       ->save();
 
     parent::submitForm($form, $form_state);
   }
 
   /**
-   * {@inheritdoc}
+   * The numeric limits: key => [title, minimum].
+   *
+   * @return array<string, array{\Drupal\Core\StringTranslation\TranslatableMarkup, int}>
+   *   Limit field definitions.
    */
-  public function validateForm(array &$form, FormStateInterface $form_state): void {
-    parent::validateForm($form, $form_state);
+  private function limitFields(): array {
+    return [
+      'page_size' => [$this->t('Maximum page size for list tools'), 1],
+      'max_body_bytes' => [$this->t('Maximum request body size (bytes)'), 1024],
+      'session_ttl' => [$this->t('Session time-to-live (seconds)'), 60],
+      'idempotency_ttl' => [$this->t('Idempotency retention (seconds)'), 60],
+      'flood_limit' => [$this->t('Requests per window, per user and client'), 1],
+      'flood_window' => [$this->t('Rate limit window (seconds)'), 60],
+    ];
+  }
 
-    $targets = array_filter(array_map('trim', explode(
-      "\n", (string) $form_state->getValue(['mutations', 'configuration_field_targets'])
-    )));
-    foreach ($targets as $target) {
-      if (!preg_match('/^(node|taxonomy_term):[a-z][a-z0-9_]{0,31}$/D', $target)) {
-        $form_state->setErrorByName('mutations][configuration_field_targets', $this->t('Use node:bundle or taxonomy_term:vocabulary machine names.'));
-      }
-    }
+  /**
+   * Builds a checkboxes element; stale configured values stay selectable.
+   */
+  private function checkboxes(mixed $title, array $options, mixed $selected, mixed $description = NULL): array {
+    $selected = array_values(array_filter((array) $selected, 'is_string'));
+    $options += array_combine($selected, $selected) ?: [];
+    return [
+      '#type' => 'checkboxes',
+      '#title' => $title,
+      '#description' => $description,
+      '#options' => $options,
+      '#default_value' => $selected,
+    ];
+  }
 
-    $resourceUri = rtrim(trim((string) $form_state->getValue(['auth', 'resource_uri'])), '/');
-    $parts = parse_url($resourceUri);
-    if (!\is_array($parts)
-      || ($parts['scheme'] ?? '') !== 'https'
-      || empty($parts['host'])
-      || ($parts['path'] ?? '') !== '/mcp'
-      || isset($parts['user'])
-      || isset($parts['pass'])
-      || isset($parts['query'])
-      || isset($parts['fragment'])) {
-      $form_state->setErrorByName('auth][resource_uri', $this->t('Enter an absolute HTTPS URI ending in /mcp, without credentials, a query, or a fragment.'));
-    }
+  /**
+   * Bundle options for an entity type, keyed by machine name.
+   *
+   * @return array<string, string>
+   *   Labels keyed by bundle machine name.
+   */
+  private function bundleOptions(string $entityTypeId): array {
+    return array_map(
+      static fn (array $info): string => (string) $info['label'],
+      $this->bundleInfo->getBundleInfo($entityTypeId),
+    );
+  }
 
-    $allowedHosts = array_values(array_filter(array_map(
-      'trim',
-      explode("\n", (string) $form_state->getValue(['auth', 'allowed_hosts']))
-    )));
-    if ($allowedHosts === []) {
-      $form_state->setErrorByName('auth][allowed_hosts', $this->t('At least one allowed host is required.'));
-    }
-    elseif (\is_array($parts) && !\in_array(strtolower((string) ($parts['host'] ?? '')), array_map('strtolower', $allowedHosts), TRUE)) {
-      $form_state->setErrorByName('auth][allowed_hosts', $this->t('Allowed hosts must include the canonical resource URI host.'));
-    }
+  /**
+   * Returns the selected keys of a checkboxes element.
+   *
+   * @return list<string>
+   *   Selected option keys.
+   */
+  private function checked(array $path, FormStateInterface $form_state): array {
+    return array_values(array_map('strval', array_keys(array_filter((array) $form_state->getValue($path)))));
+  }
+
+  /**
+   * Splits a textarea value into trimmed, non-empty lines.
+   *
+   * @return list<string>
+   *   The lines.
+   */
+  private function lines(mixed $value): array {
+    return array_values(array_filter(array_map('trim', explode("\n", (string) $value))));
   }
 
 }

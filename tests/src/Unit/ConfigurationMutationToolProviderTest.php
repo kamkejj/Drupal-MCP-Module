@@ -29,7 +29,6 @@ final class ConfigurationMutationToolProviderTest extends TestCase {
       $this->assertStringNotContainsString('article', json_encode($tool->inputSchema));
     }
     $this->assertArrayNotHasKey('body', (array) $tools[0]->inputSchema['properties']);
-    $this->assertSame('mutation_families.configuration', ToolFamily::ConfigurationMutation->settingsKey());
   }
 
 }

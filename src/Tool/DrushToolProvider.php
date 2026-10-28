@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\drupal_mcp\Tool;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\drupal_mcp\Diagnostics\ApprovedDrushCommands;
 use Drupal\drupal_mcp\Diagnostics\DrushRunner;
 use Drupal\drupal_mcp\Mcp\ToolDefinition;
@@ -14,6 +13,7 @@ use Drupal\drupal_mcp\Mcp\ToolSchema;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Mcp\Exception\ToolCallException;
 use Mcp\Schema\ToolAnnotations;
+use Drupal\drupal_mcp\Settings;
 
 /**
  * The typed Drush diagnostics tool (family: drush).
@@ -28,7 +28,7 @@ final class DrushToolProvider implements ToolProviderInterface {
 
   public function __construct(
     private readonly DrushRunner $runner,
-    private readonly ConfigFactoryInterface $configFactory,
+    private readonly Settings $settings,
   ) {}
 
   /**
@@ -36,8 +36,7 @@ final class DrushToolProvider implements ToolProviderInterface {
    */
   public function tools(): array {
     $specs = ApprovedDrushCommands::all();
-    $enabled = (array) ($this->configFactory->get('drupal_mcp.settings')->get('drush_commands') ?? []);
-    $enum = array_values(array_intersect(array_keys($specs), $enabled));
+    $enum = array_values(array_intersect(array_keys($specs), $this->settings->drushCommands()));
     if ($enum === []) {
       // Fail closed: with no approved commands, do not advertise the tool.
       return [];
@@ -81,11 +80,9 @@ final class DrushToolProvider implements ToolProviderInterface {
    *   The operation result.
    */
   private function run(TokenAuthUser $caller, string $commandId, array $arguments): array {
-    $settings = $this->configFactory->get('drupal_mcp.settings');
-    $enabled = (array) ($settings->get('drush_commands') ?? []);
     $specs = ApprovedDrushCommands::all();
 
-    if (!isset($specs[$commandId]) || !\in_array($commandId, $enabled, TRUE)) {
+    if (!isset($specs[$commandId]) || !\in_array($commandId, $this->settings->drushCommands(), TRUE)) {
       throw new ToolCallException(sprintf('Drush diagnostic "%s" is not approved on this site.', $commandId));
     }
     return $this->runner->run($caller, $specs[$commandId], $arguments);

@@ -10,8 +10,9 @@ IDs, redirect URIs, and usernames with deployment-specific values.
   `composer install` from the reviewed lock file and confirm all approved
   Composer patches apply cleanly before deployment.
 - Serve the canonical MCP resource over trusted HTTPS. Configure Drupal
-  `trusted_host_patterns`, `drupal_mcp.settings:resource_uri`, and
-  `drupal_mcp.settings:allowed_hosts` to the same canonical origin.
+  `trusted_host_patterns` and `drupal_mcp.settings:resource_uri` to the same
+  canonical origin. The resource URI host is always allowed; list only extra
+  hosts in `allowed_hosts`.
 - Keep Simple OAuth public and private keys outside the web root, owned by the
   PHP runtime account, and readable only by the required deployment users.
 - Enable only the required OAuth modules and `drupal_mcp`. The read scope must
@@ -84,27 +85,28 @@ resulting bearer token only in the `Authorization` header.
 
 ## Taxonomy and node write enablement
 
-Keep `mutation_families.taxonomy`, `writable_vocabularies`,
-`mutation_families.node`, `writable_node_bundles`, and
-`destructive_mutations.taxonomy_terms` at their default-off values until a
+Keep `families.taxonomy_mutation`, `taxonomy.writable_vocabularies`,
+`families.node_mutation`, `content.writable_bundles`, and
+`taxonomy.allow_term_delete` at their default-off values until a
 reviewed deployment explicitly needs them. For Tags mutations, grant a dedicated
 role `access mcp write` plus the required native taxonomy and text format
 permissions, provision the role-bounded `mcp:write` OAuth scope, enable
-`mutation_families.taxonomy`, and add `tags` to `writable_vocabularies`. Enable
-`destructive_mutations.taxonomy_terms` separately only when term deletion is
+`families.taxonomy_mutation`, and add `tags` to `taxonomy.writable_vocabularies`.
+Enable `taxonomy.allow_term_delete` separately only when term deletion is
 required. Do not grant read access implicitly: clients needing both capabilities
 must request both scopes and the user must hold both permissions.
 
 Idempotency records contain a keyed caller identity digest, payload digest, and
-bounded result for `idempotency_ttl` seconds. Monitor mutation audit outcomes
+bounded result for `limits.idempotency_ttl` seconds. Monitor mutation audit outcomes
 and unexpected failures; arguments and idempotency keys are never logged.
 Term deletion remains default-off, is advertised only when explicitly enabled,
 and requires revision and name confirmation; referenced terms are not deleted.
 
 Node writes follow the same model: grant a dedicated role `access mcp write`
 plus the required native node and text-format permissions, enable
-`mutation_families.node`, and list writable bundles under
-`writable_node_bundles` (always a subset of the read-exposed `node_bundles`).
+`families.node_mutation`, and list writable bundles under
+`content.writable_bundles` (always a subset of the read-exposed
+`content.bundles`).
 `drupal_content_get` exposes the `revision_id` clients must pass as
 `expected_revision_id` to `drupal_content_update`; updates save new revisions
 and both operations require idempotency keys. Node deletion is not exposed.
