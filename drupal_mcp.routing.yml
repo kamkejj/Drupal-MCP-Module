@@ -28,4 +28,4 @@ drupal_mcp.settings:
     _form: 'Drupal\drupal_mcp\Form\SettingsForm'
     _title: 'Drupal MCP settings'
   requirements:
-    _permission: 'administer site configuration'
+    _permission: 'administer drupal mcp'

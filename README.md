@@ -416,7 +416,7 @@ not inherit read catalogue access.
 
 Taxonomy mutations are configured at **Administration > Configuration > Web
 services > Drupal MCP settings** (`/admin/config/services/drupal-mcp`) by an
-account with `administer site configuration`:
+account with `administer drupal mcp`:
 
 1. Under **Enabled tool families**, check **Taxonomy term create and update**.
 2. Under **Taxonomy**, select **Tags** as both readable and writable. Writable

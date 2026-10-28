@@ -104,6 +104,22 @@ function drupal_mcp_update_11003(): void {
 }
 
 /**
+ * Grants "administer drupal mcp" to roles that could configure MCP before.
+ *
+ * The settings form previously required "administer site configuration".
+ * Existing administrators keep access; revoke the new permission from roles
+ * that should no longer configure MCP.
+ */
+function drupal_mcp_update_11004(): void {
+  foreach (\Drupal::entityTypeManager()->getStorage('user_role')->loadMultiple() as $role) {
+    /** @var \Drupal\user\RoleInterface $role */
+    if (!$role->isAdmin() && $role->hasPermission('administer site configuration')) {
+      $role->grantPermission('administer drupal mcp')->save();
+    }
+  }
+}
+
+/**
  * Removes only module-owned operational idempotency state.
  */
 function drupal_mcp_uninstall(): void {
