@@ -104,6 +104,87 @@ final class ConfigurationMutationKernelTest extends KernelTestBase {
   }
 
   /**
+   * Tests image field creation with bounded settings and default displays.
+   */
+  public function testImageFieldCreation(): void {
+    [$caller, $mutator] = $this->imageBuilder();
+    $mutator->create($caller, 'drupal_field_create', $this->imageField('field_hero', [
+      'type' => 'image',
+      'file_extensions' => ['png', 'webp'],
+      'alt_field_required' => FALSE,
+    ]));
+
+    $field = FieldConfig::loadByName('node', 'story', 'field_hero');
+    $this->assertSame('image', $field->getType());
+    $this->assertSame('public', $field->getFieldStorageDefinition()->getSetting('uri_scheme'));
+    $this->assertSame('png webp', $field->getSetting('file_extensions'));
+    $this->assertTrue((bool) $field->getSetting('alt_field'));
+    $this->assertFalse((bool) $field->getSetting('alt_field_required'));
+    // Server defaults the caller cannot influence.
+    $this->assertSame('[date:custom:Y]-[date:custom:m]', $field->getSetting('file_directory'));
+    $this->assertSame('', $field->getSetting('max_filesize'));
+    $repository = $this->container->get('entity_display.repository');
+    $this->assertSame('image_image', $repository->getFormDisplay('node', 'story')->getComponent('field_hero')['type']);
+    $this->assertSame('image', $repository->getViewDisplay('node', 'story')->getComponent('field_hero')['type']);
+  }
+
+  /**
+   * Tests private image storage is refused when no private path exists.
+   */
+  public function testPrivateImageStorageRequiresConfiguredPrivatePath(): void {
+    $private = ['type' => 'image', 'uri_scheme' => 'private'];
+    [$caller, $mutator] = $this->imageBuilder();
+    try {
+      $mutator->create($caller, 'drupal_field_create', $this->imageField('field_secret', $private));
+      $this->fail('Expected private image storage to be refused.');
+    }
+    catch (MutationException $exception) {
+      $this->assertSame('unavailable_scheme', $exception->category);
+    }
+    $this->assertNull(FieldConfig::loadByName('node', 'story', 'field_secret'));
+
+    $this->setSetting('file_private_path', $this->siteDirectory . '/private');
+    $this->container->get('kernel')->rebuildContainer();
+    $this->container = \Drupal::getContainer();
+    [$caller, $mutator] = $this->imageBuilder(FALSE);
+    $mutator->create($caller, 'drupal_field_create', $this->imageField('field_secret', $private));
+    $field = FieldConfig::loadByName('node', 'story', 'field_secret');
+    $this->assertSame('private', $field->getFieldStorageDefinition()->getSetting('uri_scheme'));
+  }
+
+  /**
+   * Prepares an approved image target and returns [caller, mutator].
+   */
+  private function imageBuilder(bool $createType = TRUE): array {
+    $user = User::load(2) ?? User::create(['name' => 'builder', 'roles' => ['builder'], 'status' => 1]);
+    $user->save();
+    $this->config('drupal_mcp.settings')
+      ->set('families.configuration_mutation', TRUE)
+      ->set('configuration.field_targets', ['node:story'])
+      ->set('configuration.field_types', ['image'])
+      ->save();
+    $mutator = $this->container->get(ConfigurationMutator::class);
+    $caller = $this->tokenCaller($user);
+    if ($createType) {
+      $mutator->create($caller, 'drupal_content_type_create', ['machine_name' => 'story', 'label' => 'Story']);
+    }
+    return [$caller, $mutator];
+  }
+
+  /**
+   * Builds drupal_field_create arguments for an image field on "story".
+   */
+  private function imageField(string $name, array $definition): array {
+    return [
+      'entity_type' => 'node',
+      'bundle' => 'story',
+      'field_name' => $name,
+      'label' => 'Image',
+      'definition' => $definition,
+    ];
+  }
+
+  /**
    * Tests native administration permission enforcement.
    */
   public function testNativePermissionRequired(): void {

@@ -12,6 +12,22 @@ use Drupal\drupal_mcp\Mcp\ToolSchema;
 final class SupportedFieldTypes {
 
   /**
+   * Raster image extensions an image field may accept.
+   *
+   * SVG is excluded on purpose: it can carry script and is not a raster
+   * format the image toolkit processes.
+   */
+  public const IMAGE_EXTENSIONS = ['png', 'gif', 'jpg', 'jpeg', 'webp'];
+
+  /**
+   * Storage schemes an image field may use.
+   *
+   * Availability is checked at creation time against the registered stream
+   * wrappers: "private" exists only when a private file path is configured.
+   */
+  public const IMAGE_SCHEMES = ['public', 'private'];
+
+  /**
    * Returns the supported widget and formatter for each field type.
    */
   public static function all(): array {
@@ -26,6 +42,7 @@ final class SupportedFieldTypes {
       'text_long' => ['text_textarea', 'text_default'],
       'text_with_summary' => ['text_textarea_with_summary', 'text_default'],
       'entity_reference' => ['entity_reference_autocomplete', 'entity_reference_label'],
+      'image' => ['image_image', 'image'],
     ];
   }
 
@@ -57,6 +74,24 @@ final class SupportedFieldTypes {
         $properties['precision'] = ['type' => 'integer', 'minimum' => 10, 'maximum' => 32];
         $properties['scale'] = ['type' => 'integer', 'minimum' => 0, 'maximum' => 10];
       }
+      elseif ($type === 'image') {
+        $properties['uri_scheme'] = [
+          'type' => 'string',
+          'enum' => self::IMAGE_SCHEMES,
+          'description' => 'File storage; "private" requires a configured private file path. Defaults to "public".',
+        ];
+        $properties['file_extensions'] = [
+          'type' => 'array',
+          'items' => ['type' => 'string', 'enum' => self::IMAGE_EXTENSIONS],
+          'minItems' => 1,
+          'uniqueItems' => TRUE,
+          'description' => 'Allowed upload extensions. Defaults to all listed raster formats.',
+        ];
+        $properties['alt_field_required'] = [
+          'type' => 'boolean',
+          'description' => 'Whether alternative text is required. Defaults to true.',
+        ];
+      }
       $variants[] = ToolSchema::object($properties, $required);
     }
     return ['oneOf' => $variants];
@@ -74,6 +109,7 @@ final class SupportedFieldTypes {
       'entity_reference' => ['type', 'target_type', 'target_bundles'],
       'string', 'text' => ['type', 'max_length'],
       'decimal' => ['type', 'precision', 'scale'],
+      'image' => ['type', 'uri_scheme', 'file_extensions', 'alt_field_required'],
       default => ['type'],
     };
     if (array_diff(array_keys($definition), $allowed)) {
@@ -111,7 +147,37 @@ final class SupportedFieldTypes {
         ],
       ];
     }
+    if ($type === 'image') {
+      [$storage, $instance] = self::imageSettings($definition);
+    }
     return [$storage, $instance];
+  }
+
+  /**
+   * Validates image settings; the upload directory and limits stay default.
+   *
+   * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+   *   Storage settings and instance settings.
+   */
+  private static function imageSettings(array $definition): array {
+    $scheme = $definition['uri_scheme'] ?? 'public';
+    if (!\in_array($scheme, self::IMAGE_SCHEMES, TRUE)) {
+      throw new MutationException('invalid_settings', 'Unsupported image storage scheme.');
+    }
+    $extensions = $definition['file_extensions'] ?? self::IMAGE_EXTENSIONS;
+    if (!is_array($extensions) || $extensions === [] || !array_is_list($extensions)
+      || count(array_unique($extensions)) !== count($extensions)
+      || array_diff($extensions, self::IMAGE_EXTENSIONS) !== []) {
+      throw new MutationException('invalid_settings', 'Image extensions must be a unique list of supported raster formats.');
+    }
+    $altRequired = $definition['alt_field_required'] ?? TRUE;
+    if (!is_bool($altRequired)) {
+      throw new MutationException('invalid_settings', 'The alternative-text requirement must be a boolean.');
+    }
+    return [
+      ['uri_scheme' => $scheme],
+      ['file_extensions' => implode(' ', $extensions), 'alt_field' => TRUE, 'alt_field_required' => $altRequired],
+    ];
   }
 
 }

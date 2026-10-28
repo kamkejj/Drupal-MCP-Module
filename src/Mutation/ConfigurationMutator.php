@@ -9,6 +9,8 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\EntityDisplayRepositoryInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Lock\LockBackendInterface;
+use Drupal\Core\StreamWrapper\StreamWrapperInterface;
+use Drupal\Core\StreamWrapper\StreamWrapperManagerInterface;
 use Drupal\Component\Plugin\PluginManagerInterface;
 use Drupal\simple_oauth\Authentication\TokenAuthUser;
 use Psr\Log\LoggerInterface;
@@ -33,6 +35,7 @@ final class ConfigurationMutator {
     private readonly PluginManagerInterface $fieldTypes,
     private readonly PluginManagerInterface $widgets,
     private readonly PluginManagerInterface $formatters,
+    private readonly StreamWrapperManagerInterface $streamWrappers,
   ) {}
 
   /**
@@ -244,6 +247,10 @@ final class ConfigurationMutator {
           throw new MutationException('missing_reference_bundle', 'A reference target bundle does not exist.');
         }
       }
+    }
+    // The same WRITE_VISIBLE filter ImageItem uses for upload destinations.
+    if ($type === 'image' && !\array_key_exists($storageSettings['uri_scheme'], $this->streamWrappers->getWrappers(StreamWrapperInterface::WRITE_VISIBLE))) {
+      throw new MutationException('unavailable_scheme', 'The requested file storage scheme is not available on this site.');
     }
     $cardinality = $arguments['cardinality'] ?? 1;
     if (!in_array($cardinality, [-1, 1, 2, 3, 4, 5, 10, 20, 50], TRUE)) {

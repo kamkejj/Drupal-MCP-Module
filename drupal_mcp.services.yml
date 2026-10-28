@@ -165,6 +165,7 @@ services:
       - '@plugin.manager.field.field_type'
       - '@plugin.manager.field.widget'
       - '@plugin.manager.field.formatter'
+      - '@stream_wrapper_manager'
 
   Drupal\drupal_mcp\Tool\ConfigurationMutationToolProvider:
     class: Drupal\drupal_mcp\Tool\ConfigurationMutationToolProvider

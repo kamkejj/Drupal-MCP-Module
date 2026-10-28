@@ -7,6 +7,7 @@ namespace Drupal\Tests\drupal_mcp\Unit;
 use Drupal\drupal_mcp\Mutation\MutationException;
 use Drupal\drupal_mcp\Mutation\SupportedFieldTypes;
 use Drupal\Tests\UnitTestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 
 /**
@@ -47,7 +48,64 @@ final class SupportedFieldTypesTest extends UnitTestCase {
    */
   public function testUnsupportedPluginRejected(): void {
     $this->expectException(MutationException::class);
-    SupportedFieldTypes::settings(['type' => 'image']);
+    SupportedFieldTypes::settings(['type' => 'file']);
+  }
+
+  /**
+   * Tests image defaults: public storage, core extensions, required alt text.
+   */
+  public function testImageDefaults(): void {
+    $this->assertSame(
+      [
+        ['uri_scheme' => 'public'],
+        ['file_extensions' => 'png gif jpg jpeg webp', 'alt_field' => TRUE, 'alt_field_required' => TRUE],
+      ],
+      SupportedFieldTypes::settings(['type' => 'image']),
+    );
+  }
+
+  /**
+   * Tests the bounded image settings a caller may choose.
+   */
+  public function testImageBoundedSettings(): void {
+    $this->assertSame(
+      [
+        ['uri_scheme' => 'private'],
+        ['file_extensions' => 'png webp', 'alt_field' => TRUE, 'alt_field_required' => FALSE],
+      ],
+      SupportedFieldTypes::settings([
+        'type' => 'image',
+        'uri_scheme' => 'private',
+        'file_extensions' => ['png', 'webp'],
+        'alt_field_required' => FALSE,
+      ]),
+    );
+  }
+
+  /**
+   * Tests unsafe or unreviewed image settings are rejected.
+   */
+  #[DataProvider('unsafeImageDefinitions')]
+  public function testUnsafeImageSettingsRejected(array $definition): void {
+    $this->expectException(MutationException::class);
+    SupportedFieldTypes::settings(['type' => 'image'] + $definition);
+  }
+
+  /**
+   * Image definitions outside the reviewed contract.
+   */
+  public static function unsafeImageDefinitions(): array {
+    return [
+      'scriptable svg' => [['file_extensions' => ['png', 'svg']]],
+      'executable extension' => [['file_extensions' => ['php']]],
+      'extension string' => [['file_extensions' => 'png php']],
+      'empty extensions' => [['file_extensions' => []]],
+      'duplicate extensions' => [['file_extensions' => ['png', 'png']]],
+      'caller upload directory' => [['file_directory' => '../../tmp']],
+      'unreviewed size limit' => [['max_filesize' => '1 GB']],
+      'temporary scheme' => [['uri_scheme' => 'temporary']],
+      'non-boolean alt flag' => [['alt_field_required' => 'yes']],
+    ];
   }
 
   /**

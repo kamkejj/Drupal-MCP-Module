@@ -59,12 +59,23 @@ Required: `entity_type`, `bundle`, `field_name`, `label`, `definition`,
   letters/digits/underscores, at most 32 total characters.
 - `cardinality`: -1 (unlimited), 1, 2, 3, 4, 5, 10, 20, or 50.
 - `definition.type`: `string`, `string_long`, `boolean`, `integer`, `decimal`,
-  `float`, `text`, `text_long`, `text_with_summary`, or `entity_reference`.
+  `float`, `text`, `text_long`, `text_with_summary`, `entity_reference`, or
+  `image`.
 - String/text allow `max_length` (1–4096).
 - Decimal allows `precision` (10–32) and `scale` (0–10).
 - Entity references require `target_type` (`node` or `taxonomy_term`) and
   `target_bundles` (1–50 unique existing bundle machine names). Selection uses
   the default handler; automatic entity creation is disabled.
+- Images (requires the Image module) allow `uri_scheme` (`public`, the
+  default, or `private`, which is refused unless a private file path is
+  configured), `file_extensions` (a unique, non-empty subset of `png`, `gif`,
+  `jpg`, `jpeg`, `webp`; defaults to all five; SVG is not accepted), and
+  `alt_field_required` (default true). The alt-text field is always enabled.
+  The upload directory, size limit, and resolution limits stay at Drupal's
+  defaults and cannot be set through MCP. Default widget `image_image`,
+  formatter `image`. MCP has no upload tool: files are uploaded through
+  Drupal, and content mutations may only reference files the caller can
+  already view and download.
 
 Other definition properties are rejected. The target bundle, field type, and
 required plugins must be enabled. Existing storage under the same entity type

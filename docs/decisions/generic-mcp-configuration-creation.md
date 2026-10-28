@@ -53,6 +53,29 @@ These are explicitly approved initial bounds, not limitations inferred from exis
 - Return small structural projections and created config names, not unrestricted configuration exports.
 - Audit operation, caller/client identity, target IDs, outcome, and replay/recovery status without logging full arguments or supplied field content.
 
+### Amendment 2026-10-27: image fields
+
+Add `image` to the reviewed registry, approved by the user for Article-style
+content models. Bounds:
+
+- Storage `uri_scheme`: `public` (default) or `private`; creation fails with
+  `unavailable_scheme` unless the scheme is a registered, write-visible stream
+  wrapper (the same filter core's image field settings use).
+- Instance `file_extensions`: a unique, non-empty subset of the raster formats
+  `png`, `gif`, `jpg`, `jpeg`, `webp`. SVG and every non-image extension are
+  rejected.
+- Instance `alt_field_required` (default true); the alt-text field is always
+  enabled.
+- Not caller-controlled: `file_directory` (token-expanded upload path),
+  `max_filesize`, resolution limits, default images, and the title field keep
+  core defaults.
+- Display: widget `image_image`, formatter `image`, under the existing
+  native display-permission rules.
+
+The generic `file` type remains out of scope. MCP gains no upload capability;
+referencing existing files from content stays behind the per-file
+view/download access check in `NodeMutator`.
+
 ## Alternatives
 
 ### Keep configuration outside MCP
